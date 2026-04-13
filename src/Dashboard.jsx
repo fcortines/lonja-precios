@@ -1136,6 +1136,11 @@ function Dashboard(props){
                 <div style={{marginLeft:"auto"}}><ChartToggle value={chartType} onChange={setChartType}/></div>
               </div>
             </div>
+            {/* ── Tarjetas encima del gráfico ── */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:10,marginBottom:14}}>
+              {hSelP.map(function(k){return statCard(filtered,k);})}
+            </div>
+
             <div style={Object.assign({},box,{padding:"4px 10px 10px"})}>
               <PriceChart rows={filtered} selP={hSelP} chartType={chartType} height={400}
                 showCampAvg={true} from={from} to={to}/>
@@ -1146,11 +1151,8 @@ function Dashboard(props){
                 <span style={{background:"#e2e8f0",padding:"0 5px",borderRadius:3,color:"#64748b"}}>█ sin cotización</span>
               </div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:10,marginBottom:14}}>
-              {hSelP.map(function(k){return statCard(filtered,k);})}
-            </div>
 
-            {/* ── Últimas sesiones table ── */}
+            {/* ── Últimas sesiones table — valores alineados a la izquierda ── */}
             {filtered.length>0&&hSelP.length>0&&(
               <div style={Object.assign({},box,{padding:"14px 16px"})}>
                 <div style={{fontSize:13,fontWeight:700,color:"#334155",marginBottom:12}}>
@@ -1163,7 +1165,7 @@ function Dashboard(props){
                         <th style={{padding:"6px 12px",textAlign:"left",color:"#94a3b8",fontWeight:600,whiteSpace:"nowrap"}}>Fecha</th>
                         {hSelP.map(function(k){
                           var p=ALL_PRODS.find(function(x){return x.key===k;});
-                          return p?<th key={k} style={{padding:"6px 10px",textAlign:"right",color:p.color,fontWeight:600,whiteSpace:"nowrap"}}>{p.label}</th>:null;
+                          return p?<th key={k} style={{padding:"6px 12px",textAlign:"left",color:p.color,fontWeight:600,whiteSpace:"nowrap"}}>{p.label}</th>:null;
                         })}
                       </tr>
                     </thead>
@@ -1180,10 +1182,10 @@ function Dashboard(props){
                               var up=vp!=null&&v!=null&&v>vp;
                               var dn=vp!=null&&v!=null&&v<vp;
                               return(
-                                <td key={k} style={{padding:"6px 10px",textAlign:"right",
+                                <td key={k} style={{padding:"6px 12px",textAlign:"left",
                                   color:v!=null?(up?"#16a34a":dn?"#dc2626":"#334155"):"#e2e8f0",
                                   fontWeight:up||dn?600:400}}>
-                                  {v!=null?v:"—"}
+                                  {v!=null?v+" €":"—"}
                                 </td>
                               );
                             })}
