@@ -149,6 +149,9 @@ function useInstallPrompt() {
   const [prompt, setPrompt] = useState(null)
   const [installed, setInstalled] = useState(false)
 
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
+  const isInStandaloneMode = window.navigator.standalone === true
+
   useEffect(() => {
     const handler = e => { e.preventDefault(); setPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
@@ -164,12 +167,17 @@ function useInstallPrompt() {
     setPrompt(null)
   }
 
-  return { canInstall: !!prompt && !installed, install, installed }
+  return {
+    canInstall: !!prompt && !installed,
+    install,
+    installed,
+    isIOS: isIOS && !isInStandaloneMode,
+  }
 }
 
 // ── Lonja Selector Screen ─────────────────────────────────────────────────────
 function LonjaSelector({ onSelect }) {
-  const { canInstall, install, installed } = useInstallPrompt()
+  const { canInstall, install, installed, isIOS } = useInstallPrompt()
   return (
     <div style={{
       minHeight: '100vh', background: '#f8fafc',
@@ -288,32 +296,74 @@ function LonjaSelector({ onSelect }) {
           ))}
         </div>
 
-        {/* Install button - only shown when browser supports PWA install */}
-        {canInstall && (
+        {/* ── Install / acceso directo ── */}
+        {installed ? (
           <div style={{ textAlign: 'center', marginTop: 24 }}>
-            <button onClick={install} style={{
-              background: '#fff', border: '1.5px solid #e2e8f0',
-              borderRadius: 12, padding: '10px 20px', cursor: 'pointer',
+            <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              fontSize: 13, fontWeight: 600, color: '#334155',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.06)', transition: 'all .15s'
+              background: '#f0fdf4', border: '1px solid #bbf7d0',
+              borderRadius: 12, padding: '10px 20px',
+              fontSize: 13, fontWeight: 600, color: '#16a34a'
             }}>
-              <span style={{ fontSize: 18 }}>📲</span>
+              ✓ App instalada correctamente
+            </div>
+          </div>
+        ) : canInstall ? (
+          /* Android / Chrome — botón nativo */
+          <div style={{ textAlign: 'center', marginTop: 28 }}>
+            <button onClick={install} style={{
+              background: 'linear-gradient(135deg,#16a34a,#0284c7)',
+              border: 'none', borderRadius: 12, padding: '12px 24px',
+              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10,
+              fontSize: 14, fontWeight: 700, color: '#fff',
+              boxShadow: '0 4px 14px rgba(2,132,199,0.3)', transition: 'all .15s'
+            }}>
+              <span style={{ fontSize: 20 }}>📲</span>
               Añadir a pantalla de inicio
             </button>
-            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6, fontFamily: "'DM Mono',monospace" }}>
-              Instala la app para acceso rápido desde el móvil
+            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, fontFamily: "'DM Mono',monospace" }}>
+              Acceso rápido desde el móvil, sin abrir el navegador
             </p>
           </div>
-        )}
-        {installed && (
-          <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>
-            ✓ App instalada correctamente
+        ) : isIOS ? (
+          /* iOS Safari — instrucciones manuales */
+          <div style={{
+            marginTop: 28, background: '#fff',
+            border: '1.5px solid #e2e8f0', borderRadius: 16,
+            padding: '18px 20px', maxWidth: 400, margin: '28px auto 0'
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12,
+              display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>📲</span> Añadir a pantalla de inicio
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                { n: 1, icon: '⬆️', text: 'Toca el botón Compartir en la barra de Safari' },
+                { n: 2, icon: '➕', text: 'Desplázate y toca "Añadir a pantalla de inicio"' },
+                { n: 3, icon: '✓',  text: 'Toca "Añadir" — el icono aparece en tu inicio' },
+              ].map(s => (
+                <div key={s.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{
+                    width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                    background: '#eff6ff', color: '#0284c7',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700
+                  }}>{s.n}</div>
+                  <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.5, paddingTop: 3 }}>
+                    <span style={{ marginRight: 6 }}>{s.icon}</span>{s.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 12,
+              fontFamily: "'DM Mono',monospace", textAlign: 'center' }}>
+              Solo disponible en Safari · iOS 14+
+            </p>
           </div>
-        )}
+        ) : null}
 
         <p style={{
-          textAlign: 'center', marginTop: 16, fontSize: 11,
+          textAlign: 'center', marginTop: 20, fontSize: 11,
           color: '#cbd5e1', fontFamily: "'DM Mono',monospace"
         }}>
           Datos extraídos de los PDFs de cada lonja · 2015–2026
