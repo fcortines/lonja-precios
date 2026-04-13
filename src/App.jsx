@@ -347,52 +347,45 @@ function LonjaSelector({ onSelect }) {
             </div>
 
           ) : deviceType === 'android' ? (
-            /* Android — botón nativo si prompt disponible, instrucciones si no */
-            prompt ? (
-              <div style={{ textAlign:'center' }}>
+            /* Android — botón nativo si prompt disponible, instrucciones siempre visibles */
+            <div style={{
+              background: '#fff', border: '1.5px solid #e2e8f0',
+              borderRadius: 16, padding: '18px 20px'
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#334155',
+                marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>📲</span> Añadir a pantalla de inicio
+              </div>
+              {prompt ? (
                 <button onClick={install} style={{
-                  background:'linear-gradient(135deg,#16a34a,#0284c7)',
-                  border:'none', borderRadius:12, padding:'12px 28px',
-                  cursor:'pointer', display:'inline-flex', alignItems:'center', gap:10,
-                  fontSize:14, fontWeight:700, color:'#fff',
-                  boxShadow:'0 4px 14px rgba(2,132,199,0.3)'
+                  width: '100%', background: 'linear-gradient(135deg,#16a34a,#0284c7)',
+                  border: 'none', borderRadius: 10, padding: '11px 20px', marginBottom: 12,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: 8,
+                  fontSize: 14, fontWeight: 700, color: '#fff',
+                  boxShadow: '0 4px 14px rgba(2,132,199,0.3)'
                 }}>
-                  <span style={{ fontSize:20 }}>📲</span>
-                  Añadir a pantalla de inicio
+                  <span>📲</span> Instalar app
                 </button>
-                <p style={{ fontSize:11, color:'#94a3b8', marginTop:8,
-                  fontFamily:"'DM Mono',monospace" }}>
-                  Acceso rápido sin abrir el navegador
-                </p>
-              </div>
-            ) : (
-              <div style={{
-                background:'#fff', border:'1.5px solid #e2e8f0',
-                borderRadius:16, padding:'18px 20px'
-              }}>
-                <div style={{ fontSize:13, fontWeight:700, color:'#334155',
-                  marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
-                  <span>📲</span> Añadir a pantalla de inicio
-                </div>
-                {[
-                  { n:1, icon:'⋮',  text:'Toca el menú (tres puntos) de Chrome' },
-                  { n:2, icon:'➕', text:'Toca "Añadir a pantalla de inicio"' },
-                  { n:3, icon:'✓',  text:'Confirma — el icono aparece en tu inicio' },
-                ].map(s => (
-                  <div key={s.n} style={{ display:'flex', alignItems:'flex-start', gap:12, marginBottom:10 }}>
-                    <div style={{
-                      width:24, height:24, borderRadius:'50%', flexShrink:0,
-                      background:'#eff6ff', color:'#0284c7',
-                      display:'flex', alignItems:'center', justifyContent:'center',
-                      fontSize:11, fontWeight:700
-                    }}>{s.n}</div>
-                    <div style={{ fontSize:13, color:'#475569', lineHeight:1.5, paddingTop:3 }}>
-                      <span style={{ marginRight:6 }}>{s.icon}</span>{s.text}
-                    </div>
+              ) : null}
+              {[
+                { n:1, icon:'⋮',  text:'Toca el menú (tres puntos) de Chrome' },
+                { n:2, icon:'➕', text:'Toca "Añadir a pantalla de inicio"' },
+                { n:3, icon:'✓',  text:'Confirma — el icono aparece en tu inicio' },
+              ].map(s => (
+                <div key={s.n} style={{ display:'flex', alignItems:'flex-start', gap:12, marginBottom:10 }}>
+                  <div style={{
+                    width:24, height:24, borderRadius:'50%', flexShrink:0,
+                    background:'#eff6ff', color:'#0284c7',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:11, fontWeight:700
+                  }}>{s.n}</div>
+                  <div style={{ fontSize:13, color:'#475569', lineHeight:1.5, paddingTop:3 }}>
+                    <span style={{ marginRight:6 }}>{s.icon}</span>{s.text}
                   </div>
-                ))}
-              </div>
-            )
+                </div>
+              ))}
+            </div>
 
           ) : null /* escritorio: no mostrar nada */}
         </div>

@@ -464,25 +464,34 @@ function PriceChart(props){
     return found ? found.orderIdx*(-LABEL_MIN_GAP) : 0;
   }
 
+  // Min width: at least 60px per session so dates are readable on mobile
+  var minW = Math.max(480, rows.length * 14);
+
   if(chartType==="bar"){
     return(
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={rows} margin={{right:80,left:0,top:10,bottom:40}}>
-          <CartesianGrid strokeDasharray="3 6" stroke="#f1f5f9" vertical={false}/>
-          <XAxis dataKey="date" tick={<XTick/>} axisLine={false} tickLine={false} interval={0} height={50}/>
-          <YAxis tick={{fill:"#94a3b8",fontSize:10,fontFamily:"monospace"}} axisLine={false} tickLine={false} unit="€" domain={["auto","auto"]}/>
-          <Tooltip content={<ChartTT/>}/>
-          <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
-          {selP.map(function(k){var p=ALL_PRODS.find(function(x){return x.key===k;});return p?<Bar key={k} dataKey={k} name={p.label} fill={p.color} opacity={0.8} radius={[2,2,0,0]}/>:null;})}
-        </BarChart>
-      </ResponsiveContainer>
+      <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        <div style={{minWidth:minW}}>
+          <ResponsiveContainer width="100%" height={height}>
+            <BarChart data={rows} margin={{right:80,left:0,top:10,bottom:40}}>
+              <CartesianGrid strokeDasharray="3 6" stroke="#f1f5f9" vertical={false}/>
+              <XAxis dataKey="date" tick={<XTick/>} axisLine={false} tickLine={false} interval={0} height={50}/>
+              <YAxis tick={{fill:"#94a3b8",fontSize:10,fontFamily:"monospace"}} axisLine={false} tickLine={false} unit="€" domain={["auto","auto"]}/>
+              <Tooltip content={<ChartTT/>}/>
+              <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+              {selP.map(function(k){var p=ALL_PRODS.find(function(x){return x.key===k;});return p?<Bar key={k} dataKey={k} name={p.label} fill={p.color} opacity={0.8} radius={[2,2,0,0]}/>:null;})}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     );
   }
 
   return(
-    <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={timeline} margin={{right:70,left:0,top:30,bottom:40}}
-        style={{overflow:"visible"}}>
+    <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+      <div style={{minWidth:minW}}>
+        <ResponsiveContainer width="100%" height={height}>
+          <ComposedChart data={timeline} margin={{right:70,left:0,top:30,bottom:40}}
+            style={{overflow:"visible"}}>
         <CartesianGrid strokeDasharray="3 6" stroke="#f1f5f9"/>
         <XAxis dataKey="date" tick={<XTick/>} axisLine={false} tickLine={false}
           interval={0} height={50}
@@ -582,7 +591,9 @@ function PriceChart(props){
         })}
 
       </ComposedChart>
-    </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
+    </div>
   );
 }
 
