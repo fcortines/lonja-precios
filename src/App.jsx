@@ -148,13 +148,20 @@ function Login({ onOk }) {
 function useInstallPrompt() {
   const [prompt, setPrompt] = useState(null)
   const [installed, setInstalled] = useState(false)
-  const [isIOS, setIsIOS] = useState(false)
+  const [deviceType, setDeviceType] = useState('other') // 'ios' | 'android' | 'other'
 
   useEffect(() => {
-    // Detect iOS inside effect so it only runs in the browser
-    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
+    const ua = navigator.userAgent
+    const ios = /iPad|iPhone|iPod/.test(ua) && !window.MSStream
+    const android = /Android/.test(ua)
     const standalone = window.navigator.standalone === true
-    setIsIOS(ios && !standalone)
+    if (standalone) {
+      setInstalled(true)
+    } else if (ios) {
+      setDeviceType('ios')
+    } else if (android) {
+      setDeviceType('android')
+    }
 
     const handler = e => { e.preventDefault(); setPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
@@ -170,12 +177,13 @@ function useInstallPrompt() {
     setPrompt(null)
   }
 
-  return { canInstall: !!prompt && !installed, install, installed, isIOS }
+  return { prompt, install, installed, deviceType }
 }
 
 // ── Lonja Selector Screen ─────────────────────────────────────────────────────
 function LonjaSelector({ onSelect }) {
-  const { canInstall, install, installed, isIOS } = useInstallPrompt()
+  const { prompt, install, installed, deviceType } = useInstallPrompt()
+
   return (
     <div style={{
       minHeight: '100vh', background: '#f8fafc',
@@ -294,71 +302,100 @@ function LonjaSelector({ onSelect }) {
           ))}
         </div>
 
-        {/* ── Install / acceso directo ── */}
-        {installed ? (
-          <div style={{ textAlign: 'center', marginTop: 24 }}>
+        {/* ── Acceso directo / instalar ── */}
+        <div style={{ marginTop: 28, maxWidth: 420, margin: '28px auto 0' }}>
+          {installed ? (
             <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: '#f0fdf4', border: '1px solid #bbf7d0',
-              borderRadius: 12, padding: '10px 20px',
-              fontSize: 13, fontWeight: 600, color: '#16a34a'
+              textAlign: 'center', background: '#f0fdf4',
+              border: '1px solid #bbf7d0', borderRadius: 12,
+              padding: '12px 20px', fontSize: 13, fontWeight: 600, color: '#16a34a'
             }}>
-              ✓ App instalada correctamente
+              ✓ App instalada en pantalla de inicio
             </div>
-          </div>
-        ) : canInstall ? (
-          /* Android / Chrome — botón nativo */
-          <div style={{ textAlign: 'center', marginTop: 28 }}>
-            <button onClick={install} style={{
-              background: 'linear-gradient(135deg,#16a34a,#0284c7)',
-              border: 'none', borderRadius: 12, padding: '12px 24px',
-              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 10,
-              fontSize: 14, fontWeight: 700, color: '#fff',
-              boxShadow: '0 4px 14px rgba(2,132,199,0.3)', transition: 'all .15s'
+
+          ) : deviceType === 'ios' ? (
+            /* iOS Safari */
+            <div style={{
+              background: '#fff', border: '1.5px solid #e2e8f0',
+              borderRadius: 16, padding: '18px 20px'
             }}>
-              <span style={{ fontSize: 20 }}>📲</span>
-              Añadir a pantalla de inicio
-            </button>
-            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, fontFamily: "'DM Mono',monospace" }}>
-              Acceso rápido desde el móvil, sin abrir el navegador
-            </p>
-          </div>
-        ) : isIOS ? (
-          /* iOS Safari — instrucciones manuales */
-          <div style={{
-            marginTop: 28, background: '#fff',
-            border: '1.5px solid #e2e8f0', borderRadius: 16,
-            padding: '18px 20px', maxWidth: 400, margin: '28px auto 0'
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12,
-              display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 18 }}>📲</span> Añadir a pantalla de inicio
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#334155',
+                marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>📲</span> Añadir a pantalla de inicio
+              </div>
               {[
-                { n: 1, icon: '⬆️', text: 'Toca el botón Compartir en la barra de Safari' },
-                { n: 2, icon: '➕', text: 'Desplázate y toca "Añadir a pantalla de inicio"' },
-                { n: 3, icon: '✓',  text: 'Toca "Añadir" — el icono aparece en tu inicio' },
+                { n:1, icon:'⬆️', text:'Toca el botón Compartir en la barra de Safari' },
+                { n:2, icon:'➕', text:'Toca "Añadir a pantalla de inicio"' },
+                { n:3, icon:'✓',  text:'Toca "Añadir" — el icono aparece en tu inicio' },
               ].map(s => (
-                <div key={s.n} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <div key={s.n} style={{ display:'flex', alignItems:'flex-start', gap:12, marginBottom:10 }}>
                   <div style={{
-                    width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-                    background: '#eff6ff', color: '#0284c7',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700
+                    width:24, height:24, borderRadius:'50%', flexShrink:0,
+                    background:'#eff6ff', color:'#0284c7',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:11, fontWeight:700
                   }}>{s.n}</div>
-                  <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.5, paddingTop: 3 }}>
-                    <span style={{ marginRight: 6 }}>{s.icon}</span>{s.text}
+                  <div style={{ fontSize:13, color:'#475569', lineHeight:1.5, paddingTop:3 }}>
+                    <span style={{ marginRight:6 }}>{s.icon}</span>{s.text}
                   </div>
                 </div>
               ))}
+              <p style={{ fontSize:10, color:'#94a3b8', marginTop:4,
+                fontFamily:"'DM Mono',monospace", textAlign:'center' }}>
+                Solo disponible en Safari · iOS 14+
+              </p>
             </div>
-            <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 12,
-              fontFamily: "'DM Mono',monospace", textAlign: 'center' }}>
-              Solo disponible en Safari · iOS 14+
-            </p>
-          </div>
-        ) : null}
+
+          ) : deviceType === 'android' ? (
+            /* Android — botón nativo si prompt disponible, instrucciones si no */
+            prompt ? (
+              <div style={{ textAlign:'center' }}>
+                <button onClick={install} style={{
+                  background:'linear-gradient(135deg,#16a34a,#0284c7)',
+                  border:'none', borderRadius:12, padding:'12px 28px',
+                  cursor:'pointer', display:'inline-flex', alignItems:'center', gap:10,
+                  fontSize:14, fontWeight:700, color:'#fff',
+                  boxShadow:'0 4px 14px rgba(2,132,199,0.3)'
+                }}>
+                  <span style={{ fontSize:20 }}>📲</span>
+                  Añadir a pantalla de inicio
+                </button>
+                <p style={{ fontSize:11, color:'#94a3b8', marginTop:8,
+                  fontFamily:"'DM Mono',monospace" }}>
+                  Acceso rápido sin abrir el navegador
+                </p>
+              </div>
+            ) : (
+              <div style={{
+                background:'#fff', border:'1.5px solid #e2e8f0',
+                borderRadius:16, padding:'18px 20px'
+              }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'#334155',
+                  marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
+                  <span>📲</span> Añadir a pantalla de inicio
+                </div>
+                {[
+                  { n:1, icon:'⋮',  text:'Toca el menú (tres puntos) de Chrome' },
+                  { n:2, icon:'➕', text:'Toca "Añadir a pantalla de inicio"' },
+                  { n:3, icon:'✓',  text:'Confirma — el icono aparece en tu inicio' },
+                ].map(s => (
+                  <div key={s.n} style={{ display:'flex', alignItems:'flex-start', gap:12, marginBottom:10 }}>
+                    <div style={{
+                      width:24, height:24, borderRadius:'50%', flexShrink:0,
+                      background:'#eff6ff', color:'#0284c7',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize:11, fontWeight:700
+                    }}>{s.n}</div>
+                    <div style={{ fontSize:13, color:'#475569', lineHeight:1.5, paddingTop:3 }}>
+                      <span style={{ marginRight:6 }}>{s.icon}</span>{s.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+
+          ) : null /* escritorio: no mostrar nada */}
+        </div>
 
         <p style={{
           textAlign: 'center', marginTop: 20, fontSize: 11,
