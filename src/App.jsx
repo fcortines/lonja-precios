@@ -148,11 +148,14 @@ function Login({ onOk }) {
 function useInstallPrompt() {
   const [prompt, setPrompt] = useState(null)
   const [installed, setInstalled] = useState(false)
-
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
-  const isInStandaloneMode = window.navigator.standalone === true
+  const [isIOS, setIsIOS] = useState(false)
 
   useEffect(() => {
+    // Detect iOS inside effect so it only runs in the browser
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
+    const standalone = window.navigator.standalone === true
+    setIsIOS(ios && !standalone)
+
     const handler = e => { e.preventDefault(); setPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
     window.addEventListener('appinstalled', () => setInstalled(true))
@@ -167,12 +170,7 @@ function useInstallPrompt() {
     setPrompt(null)
   }
 
-  return {
-    canInstall: !!prompt && !installed,
-    install,
-    installed,
-    isIOS: isIOS && !isInStandaloneMode,
-  }
+  return { canInstall: !!prompt && !installed, install, installed, isIOS }
 }
 
 // ── Lonja Selector Screen ─────────────────────────────────────────────────────
