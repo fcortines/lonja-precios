@@ -144,8 +144,32 @@ function Login({ onOk }) {
   )
 }
 
+// ── PWA Install button ────────────────────────────────────────────────────────
+function useInstallPrompt() {
+  const [prompt, setPrompt] = useState(null)
+  const [installed, setInstalled] = useState(false)
+
+  useEffect(() => {
+    const handler = e => { e.preventDefault(); setPrompt(e) }
+    window.addEventListener('beforeinstallprompt', handler)
+    window.addEventListener('appinstalled', () => setInstalled(true))
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  async function install() {
+    if (!prompt) return
+    prompt.prompt()
+    const { outcome } = await prompt.userChoice
+    if (outcome === 'accepted') setInstalled(true)
+    setPrompt(null)
+  }
+
+  return { canInstall: !!prompt && !installed, install, installed }
+}
+
 // ── Lonja Selector Screen ─────────────────────────────────────────────────────
 function LonjaSelector({ onSelect }) {
+  const { canInstall, install, installed } = useInstallPrompt()
   return (
     <div style={{
       minHeight: '100vh', background: '#f8fafc',
@@ -264,8 +288,32 @@ function LonjaSelector({ onSelect }) {
           ))}
         </div>
 
+        {/* Install button - only shown when browser supports PWA install */}
+        {canInstall && (
+          <div style={{ textAlign: 'center', marginTop: 24 }}>
+            <button onClick={install} style={{
+              background: '#fff', border: '1.5px solid #e2e8f0',
+              borderRadius: 12, padding: '10px 20px', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              fontSize: 13, fontWeight: 600, color: '#334155',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)', transition: 'all .15s'
+            }}>
+              <span style={{ fontSize: 18 }}>📲</span>
+              Añadir a pantalla de inicio
+            </button>
+            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6, fontFamily: "'DM Mono',monospace" }}>
+              Instala la app para acceso rápido desde el móvil
+            </p>
+          </div>
+        )}
+        {installed && (
+          <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>
+            ✓ App instalada correctamente
+          </div>
+        )}
+
         <p style={{
-          textAlign: 'center', marginTop: 32, fontSize: 11,
+          textAlign: 'center', marginTop: 16, fontSize: 11,
           color: '#cbd5e1', fontFamily: "'DM Mono',monospace"
         }}>
           Datos extraídos de los PDFs de cada lonja · 2015–2026
