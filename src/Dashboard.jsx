@@ -352,10 +352,12 @@ function campRows(c, allData){return (allData||MOCK_DATA).filter(function(r){ret
 function avgOf(rows,k){var v=rows.map(function(r){return r[k];}).filter(function(x){return x!=null;});return v.length?+(v.reduce(function(a,b){return a+b;},0)/v.length).toFixed(1):null;}
 function lastVal(rows,k){var f=rows.slice().reverse().find(function(r){return r[k]!=null;});return f?f[k]:null;}
 function trendDir(rows,k){
+  // Compare last two sessions with a real value — simple and clear
   var v=rows.map(function(r){return r[k];}).filter(function(x){return x!=null;});
-  if(v.length<4)return 0;
-  var h=Math.floor(v.length/2);
-  return v.slice(-h).reduce(function(a,b){return a+b;},0)/h - v.slice(0,h).reduce(function(a,b){return a+b;},0)/h;
+  if(v.length<2)return 0;
+  var last=v[v.length-1];
+  var prev=v[v.length-2];
+  return last-prev;
 }
 
 // ── Custom X tick — only renders if this index should be shown ────────────────
@@ -999,18 +1001,32 @@ function Dashboard(props){
 
   function statCard(rows,k){
     var p=ALL_PRODS.find(function(x){return x.key===k;});if(!p)return null;
-    var last=lastVal(rows,k),a=avgOf(rows,k),tr=trendDir(rows,k);
+    var vals=rows.map(function(r){return r[k];}).filter(function(x){return x!=null;});
+    var last=vals.length?vals[vals.length-1]:null;
+    var prev=vals.length>1?vals[vals.length-2]:null;
+    var a=avgOf(rows,k);
+    var diff=last!=null&&prev!=null?+(last-prev).toFixed(1):null;
+    var diffPct=prev&&diff!=null?+(diff/prev*100).toFixed(1):null;
     return(
       <div key={k} style={{background:"#fff",borderRadius:14,padding:"16px",
         border:"1px solid #f1f5f9",borderTop:"4px solid "+p.color,
         boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
         <div style={{fontSize:11,color:"#64748b",marginBottom:6,fontFamily:"'DM Mono',monospace"}}>{p.label}</div>
-        <div style={{fontSize:30,fontWeight:700,color:"#0f172a",marginBottom:2,lineHeight:1}}>
-          {last}<span style={{fontSize:12,color:"#94a3b8",fontWeight:400}}> €</span>
+        <div style={{display:"flex",alignItems:"flex-end",gap:8,marginBottom:2}}>
+          <div style={{fontSize:30,fontWeight:700,color:"#0f172a",lineHeight:1}}>
+            {last!=null?last:"—"}<span style={{fontSize:12,color:"#94a3b8",fontWeight:400}}> €</span>
+          </div>
+          {diff!=null&&(
+            <div style={{fontSize:12,fontWeight:700,marginBottom:3,
+              color:diff>0?"#16a34a":diff<0?"#dc2626":"#94a3b8"}}>
+              {diff>0?"+":""}{diff} ({diffPct>0?"+":""}{diffPct}%)
+            </div>
+          )}
         </div>
-        <div style={{fontSize:11,color:"#94a3b8",fontFamily:"'DM Mono',monospace",marginTop:4}}>
-          avg {a} · <span style={{color:tr>0?"#16a34a":tr<0?"#dc2626":"#64748b",fontWeight:600}}>
-            {tr>0?"↑ subiendo":tr<0?"↓ bajando":"→ lateral"}</span>
+        <div style={{fontSize:10,color:"#94a3b8",fontFamily:"'DM Mono',monospace",marginTop:4,display:"flex",gap:8}}>
+          <span>avg {a}</span>
+          {prev!=null&&<span style={{color:"#cbd5e1"}}>·</span>}
+          {prev!=null&&<span>anterior {prev} €</span>}
         </div>
       </div>
     );
@@ -1130,9 +1146,55 @@ function Dashboard(props){
                 <span style={{background:"#e2e8f0",padding:"0 5px",borderRadius:3,color:"#64748b"}}>█ sin cotización</span>
               </div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:10}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:10,marginBottom:14}}>
               {hSelP.map(function(k){return statCard(filtered,k);})}
             </div>
+
+            {/* ── Últimas sesiones table ── */}
+            {filtered.length>0&&hSelP.length>0&&(
+              <div style={Object.assign({},box,{padding:"14px 16px"})}>
+                <div style={{fontSize:13,fontWeight:700,color:"#334155",marginBottom:12}}>
+                  Últimas sesiones
+                </div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'DM Mono',monospace",minWidth:400}}>
+                    <thead>
+                      <tr style={{borderBottom:"2px solid #f1f5f9"}}>
+                        <th style={{padding:"6px 12px",textAlign:"left",color:"#94a3b8",fontWeight:600,whiteSpace:"nowrap"}}>Fecha</th>
+                        {hSelP.map(function(k){
+                          var p=ALL_PRODS.find(function(x){return x.key===k;});
+                          return p?<th key={k} style={{padding:"6px 10px",textAlign:"right",color:p.color,fontWeight:600,whiteSpace:"nowrap"}}>{p.label}</th>:null;
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.slice(-12).reverse().map(function(row,ri){
+                        var prevRow=filtered.slice(-12).reverse()[ri+1];
+                        return(
+                          <tr key={row.date} style={{borderBottom:"1px solid #f8fafc",
+                            background:ri%2===0?"#fff":"#fafbfc"}}>
+                            <td style={{padding:"6px 12px",color:"#64748b",whiteSpace:"nowrap"}}>{row.date}</td>
+                            {hSelP.map(function(k){
+                              var v=row[k];
+                              var vp=prevRow?prevRow[k]:null;
+                              var up=vp!=null&&v!=null&&v>vp;
+                              var dn=vp!=null&&v!=null&&v<vp;
+                              return(
+                                <td key={k} style={{padding:"6px 10px",textAlign:"right",
+                                  color:v!=null?(up?"#16a34a":dn?"#dc2626":"#334155"):"#e2e8f0",
+                                  fontWeight:up||dn?600:400}}>
+                                  {v!=null?v:"—"}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
