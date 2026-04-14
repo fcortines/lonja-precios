@@ -432,9 +432,36 @@ function PriceChart(props){
       showHistAvg=props.showHistAvg,histRows=props.histRows,
       from=props.from,to=props.to,tickInterval=props.tickInterval;
 
+  // Only show grey S/O zones when a single product is selected
+  // (with multiple products zones differ per product and are confusing)
+  var showGaps = selP.length === 1;
+
   var timeline = buildTimeline(rows);
   var gaps = detectGaps(rows);
-  var interval = tickInterval!=null ? tickInterval : calcInterval(rows.length, 32);
+
+  // For single product: also detect null-value zones (S/O within existing sessions)
+  var soZones = [];
+  if(showGaps && selP.length === 1){
+    var pk = selP[0];
+    var inSO = false;
+    var soStart = null;
+    rows.forEach(function(r,i){
+      var hasVal = r[pk] != null;
+      if(!hasVal && !inSO){
+        inSO = true;
+        soStart = r.date;
+      } else if(hasVal && inSO){
+        inSO = false;
+        soZones.push({x1:soStart, x2:r.date});
+        soStart = null;
+      }
+    });
+    if(inSO && soStart) soZones.push({x1:soStart, x2:rows[rows.length-1].date});
+  }
+
+  // X axis: show one tick per month minimum
+  // Calculate interval so we get ~1 label per month
+  var interval = tickInterval!=null ? tickInterval : Math.max(1, Math.floor(rows.length / 60));
   var XTick = makeXTick(interval);
   var visEvs = EVENTS.filter(function(e){return (!from||e.date>=from)&&(!to||e.date<=to);});
 
@@ -501,10 +528,14 @@ function PriceChart(props){
         <Tooltip content={<ChartTT/>}/>
         <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
 
-        {/* Shaded gap zones */}
-        {gaps.map(function(g,i){
+        {/* Grey zones: date gaps + S/O zones — only for single product selection */}
+        {showGaps&&gaps.map(function(g,i){
           return <ReferenceArea key={"ga"+i} x1={g.x1} x2={g.x2}
-            fill="#e2e8f0" fillOpacity={0.6} stroke="none"/>;
+            fill="#e2e8f0" fillOpacity={0.55} stroke="none"/>;
+        })}
+        {showGaps&&soZones.map(function(z,i){
+          return <ReferenceArea key={"so"+i} x1={z.x1} x2={z.x2}
+            fill="#e2e8f0" fillOpacity={0.45} stroke="none"/>;
         })}
 
         {/* Event vertical lines + emoji at top */}
@@ -1025,6 +1056,33 @@ function Dashboard(props){
     var a=avgOf(rows,k);
     var diff=last!=null&&prev!=null?+(last-prev).toFixed(1):null;
     var diffPct=prev&&diff!=null?+(diff/prev*100).toFixed(1):null;
+
+    // Find last session with a real value and its date
+    var lastRow=rows.slice().reverse().find(function(r){return r[k]!=null;});
+    var lastDate=lastRow?lastRow.date:null;
+    // Check if the most recent session has data
+    var latestRow=rows.length?rows[rows.length-1]:null;
+    var hasCurrentData=latestRow&&latestRow[k]!=null;
+
+    // If latest session has no data → show S/O prominently, last known value below
+    if(!hasCurrentData&&lastDate){
+      return(
+        <div key={k} style={{background:"#fff",borderRadius:14,padding:"16px",
+          border:"1px solid #f1f5f9",borderTop:"4px solid "+p.color,
+          boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+          <div style={{fontSize:11,color:"#64748b",marginBottom:6,fontFamily:"'DM Mono',monospace"}}>{p.label}</div>
+          <div style={{fontSize:22,fontWeight:700,color:"#94a3b8",marginBottom:6,letterSpacing:1}}>
+            S/O
+          </div>
+          <div style={{fontSize:10,color:"#64748b",fontFamily:"'DM Mono',monospace",lineHeight:1.7}}>
+            <div>Sin cotización</div>
+            <div>Último: <b style={{color:"#334155"}}>{last} €</b></div>
+            <div style={{color:"#94a3b8"}}>{lastDate}</div>
+          </div>
+        </div>
+      );
+    }
+
     return(
       <div key={k} style={{background:"#fff",borderRadius:14,padding:"16px",
         border:"1px solid #f1f5f9",borderTop:"4px solid "+p.color,
