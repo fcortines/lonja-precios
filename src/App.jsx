@@ -446,34 +446,50 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [dataError, setDataError] = useState(null)
 
-  // Load prices from Supabase when a lonja is selected
+  // Load prices from Supabase when a lonja is selected — paginated to get all rows
   useEffect(() => {
     if (!lonja) return
     setLoading(true)
     setAllData(null)
     setDataError(null)
 
-    supabase
-      .from('prices')
-      .select('session_date, product_key, price')
-      .eq('lonja_id', lonja.id)
-      .order('session_date', { ascending: true })
-      .then(({ data, error }) => {
-        if (error) {
-          console.error('Supabase error:', error)
-          setDataError(error.message)
-          setLoading(false)
-          return
-        }
+    async function fetchAllRows() {
+      const PAGE = 1000  // Supabase default max per request
+      let allRows = []
+      let from = 0
+      let hasMore = true
 
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('prices')
+          .select('session_date, product_key, price')
+          .eq('lonja_id', lonja.id)
+          .order('session_date', { ascending: true })
+          .range(from, from + PAGE - 1)
+
+        if (error) throw error
+        allRows = allRows.concat(data || [])
+        hasMore = (data && data.length === PAGE)
+        from += PAGE
+      }
+      return allRows
+    }
+
+    fetchAllRows()
+      .then(rows => {
         // Convert flat rows → [{date, tbn_g1: 212, cebada_nac: 178, ...}]
         const byDate = {}
-        ;(data || []).forEach(row => {
+        rows.forEach(row => {
           if (!byDate[row.session_date]) byDate[row.session_date] = { date: row.session_date }
           byDate[row.session_date][row.product_key] = row.price
         })
         const timeline = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
         setAllData(timeline)
+        setLoading(false)
+      })
+      .catch(error => {
+        console.error('Supabase error:', error)
+        setDataError(error.message)
         setLoading(false)
       })
   }, [lonja])
