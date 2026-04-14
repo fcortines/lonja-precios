@@ -477,11 +477,31 @@ export default function App() {
 
     fetchAllRows()
       .then(rows => {
-        // Convert flat rows → [{date, tbn_g1: 212, cebada_nac: 178, ...}]
+        // All product keys — to ensure missing ones are null not undefined
+        const ALL_KEYS = [
+          "tbn_g1","tbn_g2","tbn_g3","tbn_g4","tbn_pienso",
+          "tdn_g1","tdn_g2","tdn_g3","tdn_g4",
+          "ti_pienso",
+          "cebada_nac","cebada_imp",
+          "trit_nac","trit_imp",
+          "avena_nac","avena_imp",
+          "maiz_nac","maiz_imp",
+          "habas_nac","habas_imp",
+          "guisan_nac","guisan_imp",
+          "girasol_alto","girasol_conv","colza"
+        ]
+        // Build empty skeleton with null for every product
         const byDate = {}
         rows.forEach(row => {
-          if (!byDate[row.session_date]) byDate[row.session_date] = { date: row.session_date }
-          byDate[row.session_date][row.product_key] = row.price
+          if (!byDate[row.session_date]) {
+            const empty = { date: row.session_date }
+            ALL_KEYS.forEach(k => { empty[k] = null })
+            byDate[row.session_date] = empty
+          }
+          // Only set if value is a real number
+          if (row.price != null) {
+            byDate[row.session_date][row.product_key] = row.price
+          }
         })
         const timeline = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
         setAllData(timeline)

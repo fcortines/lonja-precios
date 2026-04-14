@@ -434,7 +434,7 @@ function PriceChart(props){
 
   var timeline = buildTimeline(rows);
   var gaps = detectGaps(rows);
-  var interval = tickInterval!=null ? tickInterval : calcInterval(rows.length, 24);
+  var interval = tickInterval!=null ? tickInterval : calcInterval(rows.length, 32);
   var XTick = makeXTick(interval);
   var visEvs = EVENTS.filter(function(e){return (!from||e.date>=from)&&(!to||e.date<=to);});
 
@@ -465,7 +465,7 @@ function PriceChart(props){
   }
 
   // Min width: at least 60px per session so dates are readable on mobile
-  var minW = Math.max(480, rows.length * 14);
+  var minW = Math.max(600, rows.length * 10);
 
   if(chartType==="bar"){
     return(
@@ -582,12 +582,12 @@ function PriceChart(props){
           );
         }}/>
 
-        {/* Solid lines — connectNulls=false so they break at _sep rows */}
+        {/* Solid lines — connectNulls=true so line stays continuous */}
         {selP.map(function(k){
           var p=ALL_PRODS.find(function(x){return x.key===k;});
           return p?<Line key={k} type="monotone" dataKey={k} name={p.label}
             stroke={p.color} strokeWidth={2} dot={false}
-            activeDot={{r:4,strokeWidth:0}} connectNulls={false} legendType="line"/>:null;
+            activeDot={{r:4,strokeWidth:0}} connectNulls={true} legendType="line"/>:null;
         })}
 
       </ComposedChart>
@@ -975,7 +975,7 @@ function AlertasTab(props){
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 function Dashboard(props){
-  var allDataProp = props.allData && props.allData.length ? props.allData : MOCK_DATA;
+  var allDataProp = props.allData || [];
   var lonjaName = props.lonjaName || "Lonja de Sevilla";
   var lonjaColor = props.lonjaColor || "#0284c7";
   var onBack = props.onBack || function(){};
@@ -990,13 +990,20 @@ function Dashboard(props){
   var _ct=useState("line");var chartType=_ct[0];var setChartType=_ct[1];
   var _ca=useState("24-25");var camp=_ca[0];var setCamp=_ca[1];
   var _cc=useState(["22-23","23-24","24-25"]);var campCmp=_cc[0];var setCampCmp=_cc[1];
-  var _fr=useState("2022-01-01");var from=_fr[0];var setFrom=_fr[1];
-  var _to=useState("2026-03-24");var to=_to[0];var setTo=_to[1];
+  // Default range: earliest → latest date in actual data
+  var today=new Date().toISOString().slice(0,10);
+  var earliestDate=allDataProp.length?allDataProp[0].date:"2015-01-01";
+  var latestDate=allDataProp.length?allDataProp[allDataProp.length-1].date:today;
+  var _fr=useState(null);var from=_fr[0];var setFrom=_fr[1];
+  var _to=useState(null);var to=_to[0];var setTo=_to[1];
+  // Once data arrives set the range to cover all of it
+  var effectiveFrom = from || earliestDate;
+  var effectiveTo   = to   || latestDate;
   var _rp=useState("tbn_g3");var recP=_rp[0];var setRecP=_rp[1];
 
   function togC(k){setCampCmp(function(p){return p.includes(k)?p.filter(function(x){return x!==k;}):[...p,k];});}
 
-  var filtered=allDataProp.filter(function(r){return r.date>=from&&r.date<=to;});
+  var filtered=allDataProp.filter(function(r){return r.date>=effectiveFrom&&r.date<=effectiveTo;});
   var cc=CAMPS.find(function(c){return c.id===camp;});
   var crows=cc?campRows(cc,allDataProp):[];
   var sig=getSig(recP);
@@ -1128,9 +1135,9 @@ function Dashboard(props){
               </div>
               <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                 <span style={{fontSize:12,color:"#64748b",fontWeight:600}}>Rango:</span>
-                <input type="date" value={from} onChange={function(e){setFrom(e.target.value);}}/>
+                <input type="date" value={effectiveFrom} onChange={function(e){setFrom(e.target.value);}}/>
                 <span style={{color:"#cbd5e1"}}>—</span>
-                <input type="date" value={to} onChange={function(e){setTo(e.target.value);}}/>
+                <input type="date" value={effectiveTo} onChange={function(e){setTo(e.target.value);}}/>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                   {YRS.map(function(y){return(
                     <button key={y} onClick={function(){setFrom(y+"-01-01");setTo(y+"-12-31");}}
@@ -1138,7 +1145,7 @@ function Dashboard(props){
                         borderRadius:6,padding:"4px 9px",fontSize:11,cursor:"pointer",
                         fontFamily:"'DM Mono',monospace"}}>{y}</button>
                   );})}
-                  <button onClick={function(){setFrom("2015-01-01");setTo("2026-12-31");}}
+                  <button onClick={function(){setFrom(earliestDate);setTo(latestDate);}}
                     style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#0284c7",
                       borderRadius:6,padding:"4px 9px",fontSize:11,cursor:"pointer",
                       fontFamily:"'DM Mono',monospace",fontWeight:700}}>Todo</button>
@@ -1154,7 +1161,7 @@ function Dashboard(props){
 
             <div style={Object.assign({},box,{padding:"4px 10px 10px"})}>
               <PriceChart rows={filtered} selP={hSelP} chartType={chartType} height={400}
-                showCampAvg={true} from={from} to={to}/>
+                showCampAvg={true} from={effectiveFrom} to={effectiveTo}/>
               <div style={{paddingLeft:10,paddingTop:4,fontSize:10,color:"#94a3b8",
                 fontFamily:"'DM Mono',monospace",display:"flex",gap:14,flexWrap:"wrap"}}>
                 <span>— — media período</span>
