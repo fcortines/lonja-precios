@@ -262,7 +262,7 @@ def extract_with_claude(pdf_bytes):
 
 
 def save_to_supabase(date_str, prices):
-    """Guarda los precios en Supabase via REST API"""
+    """Guarda los precios en Supabase via REST API — upsert para evitar conflictos"""
     rows = [
         {"lonja_id": LONJA_ID, "session_date": date_str, "product_key": k, "price": v}
         for k, v in prices.items() if v is not None
@@ -273,9 +273,15 @@ def save_to_supabase(date_str, prices):
         "apikey": SUPABASE_SERVICE_KEY,
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
     }
-    r = requests.post(f"{SUPABASE_URL}/rest/v1/prices", json=rows, headers=headers, timeout=20)
+    # Use upsert endpoint with on_conflict parameter
+    r = requests.post(
+        f"{SUPABASE_URL}/rest/v1/prices?on_conflict=lonja_id,session_date,product_key",
+        json=rows, headers=headers, timeout=20
+    )
+    if not r.ok:
+        print(f"    Supabase error {r.status_code}: {r.text[:200]}")
     r.raise_for_status()
     return len(rows)
 
@@ -367,15 +373,29 @@ if __name__ == "__main__":
 
         print(f"  ✓ PDF descargado ({len(pdf)//1024} KB)")
 
-        # 2. Extraer con Claude
-        try:
-            prices = extract_with_claude(pdf)
-            n_prices = sum(1 for v in prices.values() if v is not None)
-            print(f"  ✓ Extraídos {n_prices} precios")
-        except Exception as e:
-            print(f"  ✗ Error extracción: {e}")
-            failed.append(date)
-            time.sleep(3)
+        # 2. Extraer con Claude — con reintentos si la API está saturada
+        prices = None
+        for attempt in range(3):
+            try:
+                prices = extract_with_claude(pdf)
+                n_prices = sum(1 for v in prices.values() if v is not None)
+                print(f"  ✓ Extraídos {n_prices} precios")
+                break
+            except Exception as e:
+                msg = str(e)
+                if "529" in msg or "overloaded" in msg.lower():
+                    wait = 30 * (attempt + 1)
+                    print(f"  ⚠ API saturada, esperando {wait}s... (intento {attempt+1}/3)")
+                    time.sleep(wait)
+                else:
+                    print(f"  ✗ Error extracción: {e}")
+                    failed.append(date)
+                    time.sleep(3)
+                    break
+
+        if prices is None:
+            if date not in failed:
+                failed.append(date)
             continue
 
         # 3. Guardar en Supabase
@@ -387,8 +407,8 @@ if __name__ == "__main__":
             print(f"  ✗ Error Supabase: {e}")
             failed.append(date)
 
-        # Pausa para no saturar la API de Anthropic
-        time.sleep(1.5)
+        # Pausa entre sesiones para no saturar la API
+        time.sleep(3)
 
     # ── Resumen ───────────────────────────────────────────────────────────────
     print("\n" + "=" * 60)
