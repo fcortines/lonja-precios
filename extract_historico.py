@@ -341,16 +341,22 @@ if __name__ == "__main__":
     # Obtener URLs reales desde la web de la Lonja
     pdf_index = scrape_all_pdf_urls()
 
-    # Cruzar con SESSION_DATES
-    pending = []
-    for d in SESSION_DATES:
-        if d not in existing:
-            if d in pdf_index:
-                pending.append((d, pdf_index[d]))
-            else:
-                print(f"  ⚠ Sin URL para {d} — no aparece en el índice web")
+    # Usar TODAS las fechas del índice web, no solo SESSION_DATES
+    # Así se descubren automáticamente sesiones nuevas sin tocar el código
+    all_web_dates = sorted(pdf_index.keys())
+    pending = [(d, pdf_index[d]) for d in all_web_dates if d not in existing]
 
-    print(f"  Pendientes con URL encontrada: {len(pending)} sesiones")
+    # También procesar fechas de SESSION_DATES que estén en el índice y no procesadas
+    for d in SESSION_DATES:
+        if d not in existing and d in pdf_index:
+            entry = (d, pdf_index[d])
+            if entry not in pending:
+                pending.append(entry)
+
+    # Ordenar por fecha
+    pending.sort(key=lambda x: x[0])
+
+    print(f"  Pendientes: {len(pending)} sesiones")
 
     if not pending:
         print("\n✓ Todo el histórico ya está cargado.")
