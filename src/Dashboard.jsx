@@ -118,10 +118,11 @@ const PROD_GROUPS = [
     ]
   },
   {
-    group: "Maíz",
+    group: "Maíz / Sorgo",
     products: [
-      {key:"maiz_nac", label:"Maíz Nacional",   color:"#b91c1c", base:190, vol:0.18},
-      {key:"maiz_imp", label:"Maíz Imp.",       color:"#f87171", base:192, vol:0.18},
+      {key:"maiz_nac",  label:"Maíz Nacional",   color:"#b91c1c", base:190, vol:0.18},
+      {key:"maiz_imp",  label:"Maíz Imp.",        color:"#f87171", base:192, vol:0.18},
+      {key:"sorgo_nac", label:"Sorgo Nac.",       color:"#dc2626", base:175, vol:0.18},
     ]
   },
   {
