@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase.js'
 import Dashboard from './Dashboard.jsx'
+import { Analytics } from '@vercel/analytics/react'
 
 // ── Available lonjas (add more here when ready) ───────────────────────────────
 const LONJAS = [
@@ -534,12 +535,15 @@ export default function App() {
   )
 
   return (
-    <Dashboard
-      allData={allData || []}
-      lonjaName={lonja.name}
-      lonjaId={lonja.id}
-      lonjaColor={lonja.color}
-      onBack={() => setLonja(null)}
-    />
+    <>
+      <Dashboard
+        allData={allData || []}
+        lonjaName={lonja.name}
+        lonjaId={lonja.id}
+        lonjaColor={lonja.color}
+        onBack={() => setLonja(null)}
+      />
+      <Analytics />
+    </>
   )
 }
