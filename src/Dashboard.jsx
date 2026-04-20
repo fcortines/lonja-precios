@@ -349,7 +349,13 @@ function detectGaps(rows) {
   return gaps;
 }
 
-function campRows(c, allData){return (allData||MOCK_DATA).filter(function(r){return r.date>=c.start&&r.date<=c.end;});}
+function campRows(c, allData, startMonth){
+  if(!c) return [];
+  var rows = (allData||[]).filter(function(r){return r.date>=c.start&&r.date<=c.end;});
+  // If startMonth is not October (default), reorder doesn't affect filtering
+  // but the data still comes from the same date range — just the chart display shifts
+  return rows;
+}
 function avgOf(rows,k){var v=rows.map(function(r){return r[k];}).filter(function(x){return x!=null;});return v.length?+(v.reduce(function(a,b){return a+b;},0)/v.length).toFixed(1):null;}
 function lastVal(rows,k){var f=rows.slice().reverse().find(function(r){return r[k]!=null;});return f?f[k]:null;}
 function trendDir(rows,k){
@@ -1021,7 +1027,8 @@ function Dashboard(props){
   var sSelP=_ss[0];var setSSelP=_ss[1];
   var _ct=useState("line");var chartType=_ct[0];var setChartType=_ct[1];
   var _ca=useState("24-25");var camp=_ca[0];var setCamp=_ca[1];
-  var _cc=useState(["22-23","23-24","24-25"]);var campCmp=_cc[0];var setCampCmp=_cc[1];
+  var _cc2=useState(["22-23","23-24","24-25"]);var campCmp=_cc2[0];var setCampCmp=_cc2[1];
+  var _csm=useState("10");var campStartMonth=_csm[0];var setCampStartMonth=_csm[1];
   // Default range: earliest → latest date in actual data
   var today=new Date().toISOString().slice(0,10);
   var earliestDate=allDataProp.length?allDataProp[0].date:"2015-01-01";
@@ -1321,7 +1328,7 @@ function Dashboard(props){
               <div style={{marginBottom:12}}>
                 <ProdSelector selP={mSelP} setSelP={setMSelP}/>
               </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
                 <span style={{fontSize:12,color:"#64748b",fontWeight:600,fontFamily:"'DM Mono',monospace"}}>Campañas:</span>
                 {CAMPS.map(function(c){return(
                   <button key={c.id} onClick={function(){togC(c.id);}} style={{
@@ -1333,47 +1340,58 @@ function Dashboard(props){
                 );})}
                 <div style={{marginLeft:"auto"}}><ChartToggle value={chartType} onChange={setChartType}/></div>
               </div>
+              {/* ── Selector mes de inicio ── */}
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                <span style={{fontSize:12,color:"#64748b",fontWeight:600,fontFamily:"'DM Mono',monospace"}}>Inicio campaña:</span>
+                {[
+                  {m:"10",l:"Oct"},{m:"11",l:"Nov"},{m:"12",l:"Dic"},
+                  {m:"01",l:"Ene"},{m:"02",l:"Feb"},{m:"03",l:"Mar"},
+                  {m:"04",l:"Abr"},{m:"05",l:"May"},{m:"06",l:"Jun"},
+                  {m:"07",l:"Jul"},{m:"08",l:"Ago"},{m:"09",l:"Sep"},
+                ].map(function(item){
+                  var active=campStartMonth===item.m;
+                  return(
+                    <button key={item.m} onClick={function(){setCampStartMonth(item.m);}} style={{
+                      background:active?"#0284c7":"#f8fafc",
+                      color:active?"#fff":"#64748b",
+                      border:"1px solid "+(active?"#0284c7":"#e2e8f0"),
+                      borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:active?700:400,
+                      cursor:"pointer",fontFamily:"'DM Mono',monospace"}}>{item.l}</button>
+                  );
+                })}
+              </div>
             </div>
             {mSelP.map(function(pk){
               var p=ALL_PRODS.find(function(x){return x.key===pk;});if(!p)return null;
               var maxLen=0,sm={};
-              campCmp.forEach(function(cid){var c=CAMPS.find(function(x){return x.id===cid;});if(!c)return;var r=campRows(c);sm[cid]=r;if(r.length>maxLen)maxLen=r.length;});
+              campCmp.forEach(function(cid){var c=CAMPS.find(function(x){return x.id===cid;});if(!c)return;var r=campRows(c,allDataProp,campStartMonth);sm[cid]=r;if(r.length>maxLen)maxLen=r.length;});
 
-              // ── Uniform grid: 12 months × 4 slots = 48 slots per campaign ──
-              // Map each real session to a slot by its month position in campaign
-              // Campaign starts October (month 10)
-              var CAMP_MONTHS=["10","11","12","01","02","03","04","05","06","07","08","09"];
+              // Build month sequence starting from campStartMonth
+              var ALL_MONTHS=["01","02","03","04","05","06","07","08","09","10","11","12"];
+              var startIdx=ALL_MONTHS.indexOf(campStartMonth);
+              var CAMP_MONTHS=ALL_MONTHS.slice(startIdx).concat(ALL_MONTHS.slice(0,startIdx));
               var SLOTS_PER_MONTH=4;
               var TOTAL_SLOTS=CAMP_MONTHS.length*SLOTS_PER_MONTH;
-              var MONTH_NAMES={"10":"oct","11":"nov","12":"dic","01":"ene","02":"feb","03":"mar","04":"abr","05":"may","06":"jun","07":"jul","08":"ago","09":"sep"};
+              var MONTH_NAMES={"10":"oct","11":"nov","12":"dic","01":"ene","02":"feb",
+                "03":"mar","04":"abr","05":"may","06":"jun","07":"jul","08":"ago","09":"sep"};
 
-              // Build uniform slot array
               var slots=[];
               for(var si=0;si<TOTAL_SLOTS;si++){
                 var mIdx=Math.floor(si/SLOTS_PER_MONTH);
                 var slotInMonth=si%SLOTS_PER_MONTH;
                 var monName=CAMP_MONTHS[mIdx]?MONTH_NAMES[CAMP_MONTHS[mIdx]]:"";
-                slots.push({
-                  slot:si,
-                  monthIdx:mIdx,
-                  slotInMonth:slotInMonth,
-                  label:monName,
-                  isMonthStart:slotInMonth===0,
-                });
+                slots.push({slot:si,monthIdx:mIdx,slotInMonth:slotInMonth,
+                  label:monName,isMonthStart:slotInMonth===0});
               }
 
-              // Assign campaign rows to slots by month
-              // For each campaign, group sessions by calendar month, then fill slots 0-3
               campCmp.forEach(function(cid){
                 var rows2=sm[cid]||[];
-                // Group rows by month string
                 var byMonth={};
                 rows2.forEach(function(r){
                   var mon=r.date.slice(5,7);
                   if(!byMonth[mon])byMonth[mon]=[];
                   byMonth[mon].push(r);
                 });
-                // Assign to slots
                 CAMP_MONTHS.forEach(function(mon,mi){
                   var mRows=byMonth[mon]||[];
                   for(var s=0;s<SLOTS_PER_MONTH;s++){
@@ -1401,7 +1419,6 @@ function Dashboard(props){
                     </g>
                   );
                 }
-                // Mid-slot: tiny tick
                 return(
                   <g transform={"translate("+x+","+(y+2)+")"}>
                     <line x1={0} y1={0} x2={0} y2={3} stroke="#e2e8f0" strokeWidth={1}/>
@@ -1409,12 +1426,23 @@ function Dashboard(props){
                 );
               }
 
+              // ── Stats table data ──
+              var statsRows=campCmp.map(function(cid){
+                var rows2=sm[cid]||[];
+                var vals=rows2.map(function(r){return r[pk];}).filter(function(v){return v!=null;});
+                if(!vals.length) return {cid,avg:null,max:null,min:null,n:0};
+                var avg=+(vals.reduce(function(a,b){return a+b;},0)/vals.length).toFixed(1);
+                var max=Math.max.apply(null,vals);
+                var min=Math.min.apply(null,vals);
+                return {cid,avg,max,min,n:vals.length};
+              }).filter(function(r){return r.n>0;});
+
               return(
                 <div key={pk} style={Object.assign({},box,{padding:"14px 10px 12px",marginBottom:14})}>
                   <div style={{display:"flex",alignItems:"center",gap:8,paddingLeft:10,marginBottom:10}}>
                     <span style={{width:10,height:10,borderRadius:2,background:p.color,display:"inline-block"}}/>
                     <span style={{fontSize:14,fontWeight:700,color:"#334155"}}>{p.label}</span>
-                    <span style={{fontSize:11,color:"#94a3b8",fontFamily:"'DM Mono',monospace"}}>€/t · campaña oct–oct · 4 slots/mes</span>
+                    <span style={{fontSize:11,color:"#94a3b8",fontFamily:"'DM Mono',monospace"}}>€/t · 4 slots/mes</span>
                   </div>
                   {chartType==="bar"?(
                     <ResponsiveContainer width="100%" height={200}>
@@ -1422,7 +1450,7 @@ function Dashboard(props){
                         <CartesianGrid strokeDasharray="3 6" stroke="#f1f5f9" vertical={false}/>
                         <XAxis dataKey="slot" tick={<CmpXTick/>} axisLine={false} tickLine={false} interval={0} height={36}/>
                         <YAxis tick={{fill:"#94a3b8",fontSize:9,fontFamily:"monospace"}} axisLine={false} tickLine={false} unit="€" domain={["auto","auto"]}/>
-                        <Tooltip content={<ChartTT/>} labelFormatter={function(_,payload){return payload&&payload[0]?slots[payload[0].payload.slot].label||"":""}}/>
+                        <Tooltip content={<ChartTT/>}/>
                         <Legend wrapperStyle={{fontSize:11,paddingTop:6}}/>
                         {campCmp.map(function(cid,ci){return <Bar key={cid} dataKey={cid} name={"Camp. "+cid} fill={CC[ci%CC.length]} opacity={0.8} radius={[2,2,0,0]}/>;} )}
                       </BarChart>
@@ -1438,6 +1466,48 @@ function Dashboard(props){
                         {campCmp.map(function(cid,ci){return <Line key={cid} type="monotone" dataKey={cid} name={"Camp. "+cid} stroke={CC[ci%CC.length]} strokeWidth={2} dot={false} activeDot={{r:4,strokeWidth:0}} connectNulls={true}/>;} )}
                       </ComposedChart>
                     </ResponsiveContainer>
+                  )}
+
+                  {/* ── Stats table ── */}
+                  {statsRows.length>0&&(
+                    <div style={{marginTop:12,overflowX:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,
+                        fontFamily:"'DM Mono',monospace",minWidth:320}}>
+                        <thead>
+                          <tr style={{borderBottom:"2px solid #f1f5f9"}}>
+                            <th style={{padding:"6px 12px",textAlign:"left",color:"#94a3b8",fontWeight:600}}>Campaña</th>
+                            <th style={{padding:"6px 12px",textAlign:"right",color:"#94a3b8",fontWeight:600}}>Media</th>
+                            <th style={{padding:"6px 12px",textAlign:"right",color:"#16a34a",fontWeight:600}}>Máximo</th>
+                            <th style={{padding:"6px 12px",textAlign:"right",color:"#dc2626",fontWeight:600}}>Mínimo</th>
+                            <th style={{padding:"6px 12px",textAlign:"right",color:"#94a3b8",fontWeight:600}}>Ses.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {statsRows.map(function(r,ri){
+                            return(
+                              <tr key={r.cid} style={{borderBottom:"1px solid #f8fafc",
+                                background:ri%2===0?"#fff":"#fafbfc"}}>
+                                <td style={{padding:"6px 12px",fontWeight:700,color:CC[campCmp.indexOf(r.cid)%CC.length]}}>
+                                  {r.cid}
+                                </td>
+                                <td style={{padding:"6px 12px",textAlign:"right",color:"#334155",fontWeight:600}}>
+                                  {r.avg} €
+                                </td>
+                                <td style={{padding:"6px 12px",textAlign:"right",color:"#16a34a",fontWeight:700}}>
+                                  {r.max} €
+                                </td>
+                                <td style={{padding:"6px 12px",textAlign:"right",color:"#dc2626",fontWeight:700}}>
+                                  {r.min} €
+                                </td>
+                                <td style={{padding:"6px 12px",textAlign:"right",color:"#94a3b8"}}>
+                                  {r.n}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               );
