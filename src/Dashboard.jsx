@@ -1517,7 +1517,18 @@ function Dashboard(props){
 
         {/* ══ SEÑALES ══ */}
         {tab==="senales"&&(
-          <div style={{animation:"fi .3s ease"}}>
+          <div style={{animation:"fi .3s ease",position:"relative"}}>
+            {/* Marca de agua */}
+            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-25deg)",
+              fontSize:64,fontWeight:900,color:"rgba(148,163,184,0.18)",pointerEvents:"none",
+              zIndex:999,whiteSpace:"nowrap",userSelect:"none",fontFamily:"'DM Mono',monospace",letterSpacing:4}}>
+              EN CONSTRUCCIÓN
+            </div>
+            <div style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:10,
+              padding:"10px 16px",fontSize:12,color:"#92400e",fontFamily:"'DM Mono',monospace",
+              marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
+              🚧 <span>Esta pestaña está en construcción — los datos mostrados son orientativos y pueden no ser precisos.</span>
+            </div>
             <div style={box}><ProdSelector selP={sSelP} setSelP={setSSelP}/></div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:10,marginBottom:20}}>
               {sSelP.map(function(k){
@@ -1587,7 +1598,19 @@ function Dashboard(props){
         )}
         {/* ══ ALERTAS ══ */}
         {tab==="alertas"&&(
-          <AlertasTab box={box} chartType={chartType} setChartType={setChartType}/>
+          <div style={{position:"relative"}}>
+            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-25deg)",
+              fontSize:64,fontWeight:900,color:"rgba(148,163,184,0.18)",pointerEvents:"none",
+              zIndex:999,whiteSpace:"nowrap",userSelect:"none",fontFamily:"'DM Mono',monospace",letterSpacing:4}}>
+              EN CONSTRUCCIÓN
+            </div>
+            <div style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:10,
+              padding:"10px 16px",fontSize:12,color:"#92400e",fontFamily:"'DM Mono',monospace",
+              marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
+              🚧 <span>Esta pestaña está en construcción — los datos mostrados son orientativos y pueden no ser precisos.</span>
+            </div>
+            <AlertasTab box={box} chartType={chartType} setChartType={setChartType}/>
+          </div>
         )}
 
       </div>
