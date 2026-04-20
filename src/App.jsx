@@ -390,12 +390,22 @@ function LonjaSelector({ onSelect }) {
           ) : null /* escritorio: no mostrar nada */}
         </div>
 
-        <p style={{
-          textAlign: 'center', marginTop: 20, fontSize: 11,
-          color: '#cbd5e1', fontFamily: "'DM Mono',monospace"
+        <div style={{
+          textAlign: 'center', marginTop: 20,
+          fontFamily: "'DM Mono',monospace", fontSize: 11,
+          display: 'flex', flexDirection: 'column', gap: 6
         }}>
-          Datos extraídos de los PDFs de cada lonja · 2015–2026
-        </p>
+          <p style={{ color: '#cbd5e1', margin: 0 }}>
+            Datos extraídos de los PDFs de cada lonja · 2015–2026
+          </p>
+          <p style={{ color: '#94a3b8', margin: 0 }}>
+            ¿Sugerencias o errores?{' '}
+            <a href="mailto:lonjaprecios@gmail.com"
+               style={{ color: '#0284c7', textDecoration: 'none', fontWeight: 600 }}>
+              lonjaprecios@gmail.com
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   )
