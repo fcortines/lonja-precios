@@ -1256,31 +1256,45 @@ function Dashboard(props){
               </div>
             </div>
 
-            {/* ── Últimas sesiones table — valores alineados a la izquierda ── */}
+            {/* ── Últimas sesiones table ── */}
             {filtered.length>0&&hSelP.length>0&&(
               <div style={Object.assign({},box,{padding:"14px 16px"})}>
                 <div style={{fontSize:13,fontWeight:700,color:"#334155",marginBottom:12}}>
                   Últimas sesiones
                 </div>
                 <div style={{overflowX:"auto"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'DM Mono',monospace",minWidth:400}}>
+                  <table style={{borderCollapse:"collapse",fontSize:11,
+                    fontFamily:"'DM Mono',monospace",tableLayout:"fixed",
+                    width: 120 + hSelP.length * 180 + "px"}}>
+                    <colgroup>
+                      <col style={{width:"120px"}}/>
+                      {hSelP.map(function(k){return[
+                        <col key={k+"_sep"} style={{width:"4px"}}/>,
+                        <col key={k+"_p"} style={{width:"90px"}}/>,
+                        <col key={k+"_v"} style={{width:"86px"}}/>,
+                      ];})}
+                    </colgroup>
                     <thead>
                       <tr style={{borderBottom:"2px solid #f1f5f9"}}>
-                        <th style={{padding:"6px 12px",textAlign:"left",color:"#94a3b8",fontWeight:600,whiteSpace:"nowrap"}}>Fecha</th>
+                        <th style={{padding:"6px 12px",textAlign:"left",color:"#94a3b8",fontWeight:600}}>Fecha</th>
                         {hSelP.map(function(k){
                           var p=ALL_PRODS.find(function(x){return x.key===k;});
-                          return p?(<th key={k} style={{padding:"6px 12px",textAlign:"left",color:p.color,fontWeight:600,whiteSpace:"nowrap"}}
-                            colSpan={2}>{p.label}</th>):null;
+                          return[
+                            <th key={k+"_sep"} style={{padding:0,background:"#f1f5f9"}}/>,
+                            <th key={k} colSpan={2} style={{padding:"6px 12px",textAlign:"left",
+                              color:p?p.color:"#64748b",fontWeight:600,whiteSpace:"nowrap"}}>
+                              {p?p.label:""}
+                            </th>
+                          ];
                         })}
                       </tr>
                       <tr style={{borderBottom:"1px solid #f1f5f9"}}>
                         <th/>
-                        {hSelP.map(function(k){
-                          return[
-                            <th key={k+"_p"} style={{padding:"2px 12px",textAlign:"left",color:"#94a3b8",fontSize:10,fontWeight:500}}>Precio</th>,
-                            <th key={k+"_v"} style={{padding:"2px 12px",textAlign:"left",color:"#94a3b8",fontSize:10,fontWeight:500}}>Volumen</th>
-                          ];
-                        })}
+                        {hSelP.map(function(k){return[
+                          <th key={k+"_sep"} style={{padding:0,background:"#f1f5f9"}}/>,
+                          <th key={k+"_p"} style={{padding:"2px 12px",textAlign:"left",color:"#94a3b8",fontSize:10,fontWeight:500}}>Precio</th>,
+                          <th key={k+"_v"} style={{padding:"2px 12px",textAlign:"left",color:"#94a3b8",fontSize:10,fontWeight:500}}>Volumen</th>,
+                        ];})}
                       </tr>
                     </thead>
                     <tbody>
@@ -1296,20 +1310,19 @@ function Dashboard(props){
                               var up=vp!=null&&v!=null&&v>vp;
                               var dn=vp!=null&&v!=null&&v<vp;
                               var vol=row['vol_'+k];
-                              var volStyle={};
-                              if(vol==="A") volStyle={color:"#16a34a",fontWeight:700};
-                              else if(vol==="M") volStyle={color:"#d97706",fontWeight:600};
-                              else if(vol==="B") volStyle={color:"#dc2626",fontWeight:600};
+                              var volColor=vol==="A"?"#16a34a":vol==="M"?"#d97706":vol==="B"?"#dc2626":"#cbd5e1";
+                              var volText=vol==="A"?"Alto":vol==="M"?"Medio":vol==="B"?"Bajo":"—";
                               return[
-                                <td key={k+"_p"} style={{padding:"6px 12px",textAlign:"left",
+                                <td key={k+"_sep"} style={{padding:0,background:"#f1f5f9"}}/>,
+                                <td key={k+"_p"} style={{padding:"6px 12px",
                                   color:v!=null?(up?"#16a34a":dn?"#dc2626":"#334155"):"#e2e8f0",
                                   fontWeight:up||dn?600:400}}>
                                   {v!=null?v+" €":"—"}
                                 </td>,
-                                <td key={k+"_v"} style={{padding:"6px 12px",textAlign:"left",
-                                  fontSize:10,fontFamily:"'DM Mono',monospace",...volStyle}}>
-                                  {vol==="A"?"Alto":vol==="M"?"Medio":vol==="B"?"Bajo":"—"}
-                                </td>
+                                <td key={k+"_v"} style={{padding:"6px 12px",
+                                  color:volColor,fontWeight:vol?"600":"400",fontSize:10}}>
+                                  {volText}
+                                </td>,
                               ];
                             })}
                           </tr>
