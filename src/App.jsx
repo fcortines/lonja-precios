@@ -400,9 +400,9 @@ function LonjaSelector({ onSelect }) {
           </p>
           <p style={{ color: '#94a3b8', margin: 0 }}>
             ¿Sugerencias o errores?{' '}
-            <a href="mailto:lonjaprecios@gmail.com"
+            <a href="mailto:contacto@lonja-precios.es"
                style={{ color: '#0284c7', textDecoration: 'none', fontWeight: 600 }}>
-              lonjaprecios@gmail.com
+              contacto@lonja-precios.es
             </a>
           </p>
         </div>
@@ -472,7 +472,7 @@ export default function App() {
       while (hasMore) {
         const { data, error } = await supabase
           .from('prices')
-          .select('session_date, product_key, price')
+          .select('session_date, product_key, price, volume')
           .eq('lonja_id', lonja.id)
           .order('session_date', { ascending: true })
           .range(from, from + PAGE - 1)
@@ -500,17 +500,19 @@ export default function App() {
           "guisan_nac","guisan_imp",
           "girasol_alto","girasol_conv","colza"
         ]
-        // Build empty skeleton with null for every product
+        // Convert flat rows → [{date, tbn_g1: 212, ..., vol_tbn_g1: "A", ...}]
         const byDate = {}
         rows.forEach(row => {
           if (!byDate[row.session_date]) {
             const empty = { date: row.session_date }
-            ALL_KEYS.forEach(k => { empty[k] = null })
+            ALL_KEYS.forEach(k => { empty[k] = null; empty['vol_'+k] = null })
             byDate[row.session_date] = empty
           }
-          // Only set if value is a real number
           if (row.price != null) {
             byDate[row.session_date][row.product_key] = row.price
+          }
+          if (row.volume != null) {
+            byDate[row.session_date]['vol_'+row.product_key] = row.volume
           }
         })
         const timeline = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
