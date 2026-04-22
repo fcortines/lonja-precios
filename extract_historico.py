@@ -20,9 +20,9 @@ import os, re, time, base64, json, requests
 from datetime import datetime
 
 # ── Configuración ─────────────────────────────────────────────────────────────
-ANTHROPIC_API_KEY   = os.environ.get("ANTHROPIC_API_KEY",   "TU_CLAVE_AQUI")
+ANTHROPIC_API_KEY   = os.environ.get("ANTHROPIC_API_KEY",   "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")
 SUPABASE_URL        = os.environ.get("SUPABASE_URL",        "https://vriqawhaickizakkaicc.supabase.co")
-SUPABASE_SERVICE_KEY= os.environ.get("SUPABASE_SERVICE_KEY","TU_SERVICE_KEY_AQUI")
+SUPABASE_SERVICE_KEY= os.environ.get("SUPABASE_SERVICE_KEY","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZyaXFhd2hhaWNraXpha2thaWNjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjAwMTk1NiwiZXhwIjoyMDkxNTc3OTU2fQ.AkWL53Jhb6DYordCoamEqC7GlBEGgRK24vUPkzJMYsU")
 LONJA_ID            = "sevilla"
 
 MESES = {
