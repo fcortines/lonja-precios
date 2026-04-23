@@ -90,16 +90,10 @@ SESSION_DATES = [
     "2026-03-10","2026-03-17","2026-03-24","2026-04-07",
 ]
 
-PROMPT = """Extrae los precios y volumen de operaciones de este PDF de la Lonja de Sevilla.
+PROMPT = """Extrae los precios de cereales y oleaginosas de este PDF de la Lonja de Sevilla.
 Devuelve SOLO JSON válido, sin markdown, sin texto adicional.
 Usa el valor numérico de la columna COTIZACION ACTUAL (€/Tonelada).
-Si un producto pone S/O, S/C, o no aparece, usa null para precio y volumen.
-
-Para el volumen de operaciones usa la columna "Volumen de Operaciones":
-- "A" o "ALTO" → "A"
-- "M" o "MEDIO" → "M"  
-- "B" o "BAJO" → "B"
-- vacío, S/O, o sin operaciones → null
+Si un producto pone S/O, S/C, o no aparece, usa null.
 
 Mapeo exacto de filas del PDF a claves JSON:
 - TRIGO BLANDO · Grupo 1 (Prot>=13%...) → tbn_g1
@@ -128,34 +122,18 @@ Mapeo exacto de filas del PDF a claves JSON:
 - GIRASOL · Girasol Convencional → girasol_conv
 - COLZA · 9-2-42 → colza
 
-Devuelve dos objetos: "prices" con los precios y "volumes" con los volúmenes:
 {
-  "prices": {
-    "tbn_g1":null,"tbn_g2":null,"tbn_g3":null,"tbn_g4":null,"tbn_pienso":null,
-    "tdn_g1":null,"tdn_g2":null,"tdn_g3":null,"tdn_g4":null,
-    "ti_pienso":null,
-    "cebada_nac":null,"cebada_imp":null,
-    "trit_nac":null,"trit_imp":null,
-    "avena_nac":null,"avena_imp":null,
-    "maiz_nac":null,"maiz_imp":null,
-    "habas_nac":null,"habas_imp":null,
-    "guisan_nac":null,"guisan_imp":null,
-    "girasol_alto":null,"girasol_conv":null,
-    "colza":null
-  },
-  "volumes": {
-    "tbn_g1":null,"tbn_g2":null,"tbn_g3":null,"tbn_g4":null,"tbn_pienso":null,
-    "tdn_g1":null,"tdn_g2":null,"tdn_g3":null,"tdn_g4":null,
-    "ti_pienso":null,
-    "cebada_nac":null,"cebada_imp":null,
-    "trit_nac":null,"trit_imp":null,
-    "avena_nac":null,"avena_imp":null,
-    "maiz_nac":null,"maiz_imp":null,
-    "habas_nac":null,"habas_imp":null,
-    "guisan_nac":null,"guisan_imp":null,
-    "girasol_alto":null,"girasol_conv":null,
-    "colza":null
-  }
+  "tbn_g1":null,"tbn_g2":null,"tbn_g3":null,"tbn_g4":null,"tbn_pienso":null,
+  "tdn_g1":null,"tdn_g2":null,"tdn_g3":null,"tdn_g4":null,
+  "ti_pienso":null,
+  "cebada_nac":null,"cebada_imp":null,
+  "trit_nac":null,"trit_imp":null,
+  "avena_nac":null,"avena_imp":null,
+  "maiz_nac":null,"maiz_imp":null,
+  "habas_nac":null,"habas_imp":null,
+  "guisan_nac":null,"guisan_imp":null,
+  "girasol_alto":null,"girasol_conv":null,
+  "colza":null
 }"""
 
 
@@ -245,7 +223,7 @@ def download_pdf(url):
 
 
 def extract_with_claude(pdf_bytes):
-    """Extrae precios y volúmenes del PDF usando Claude"""
+    """Extrae precios del PDF usando Claude — envía como base64 con betas header"""
     b64 = base64.b64encode(pdf_bytes).decode()
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
@@ -255,41 +233,49 @@ def extract_with_claude(pdf_bytes):
     }
     body = {
         "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 1200,
+        "max_tokens": 800,
         "messages": [{
             "role": "user",
             "content": [
-                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},
+                {
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": b64
+                    }
+                },
                 {"type": "text", "text": PROMPT}
             ]
         }]
     }
-    r = requests.post("https://api.anthropic.com/v1/messages",
-        json=body, headers=headers, timeout=90)
+    r = requests.post(
+        "https://api.anthropic.com/v1/messages",
+        json=body, headers=headers, timeout=90
+    )
     if not r.ok:
         print(f"    API error {r.status_code}: {r.text[:200]}")
     r.raise_for_status()
-    text = "".join(b.get("text", "") for b in r.json()["content"])
+    text = "".join(b.get("text","") for b in r.json()["content"])
     text = re.sub(r"```json|```", "", text).strip()
-    data = json.loads(text)
-    # Support both old format (flat dict) and new format (prices+volumes)
-    if "prices" in data:
-        return data["prices"], data.get("volumes", {})
-    else:
-        return data, {}
+    return json.loads(text)
 
 
-def save_to_supabase(date_str, prices, volumes):
-    """Guarda precios y volúmenes en Supabase"""
+def save_to_supabase(date_str, prices, volumes=None):
+    """Guarda los precios en Supabase via REST API — upsert para evitar conflictos"""
+    if volumes is None:
+        volumes = {}
     rows = []
     for k, v in prices.items():
         if v is not None:
-            row = {"lonja_id": LONJA_ID, "session_date": date_str,
-                   "product_key": k, "price": v}
             vol = volumes.get(k)
-            if vol in ("A", "M", "B"):
-                row["volume"] = vol
-            rows.append(row)
+            rows.append({
+                "lonja_id": LONJA_ID,
+                "session_date": date_str,
+                "product_key": k,
+                "price": v,
+                "volume": vol if vol in ("A","M","B") else None
+            })
     if not rows:
         return 0
     headers = {
@@ -298,9 +284,11 @@ def save_to_supabase(date_str, prices, volumes):
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates,return=minimal",
     }
+    # Use upsert endpoint with on_conflict parameter
     r = requests.post(
         f"{SUPABASE_URL}/rest/v1/prices?on_conflict=lonja_id,session_date,product_key",
-        json=rows, headers=headers, timeout=20)
+        json=rows, headers=headers, timeout=20
+    )
     if not r.ok:
         print(f"    Supabase error {r.status_code}: {r.text[:200]}")
     r.raise_for_status()
@@ -365,7 +353,8 @@ if __name__ == "__main__":
     # Usar TODAS las fechas del índice web, no solo SESSION_DATES
     # Así se descubren automáticamente sesiones nuevas sin tocar el código
     all_web_dates = sorted(pdf_index.keys())
-    pending = [(d, pdf_index[d]) for d in all_web_dates if d not in existing]
+    pending = [(d, pdf_index[d]) for d in all_web_dates
+               if d not in existing and d >= '2025-10-01']
 
     # También procesar fechas de SESSION_DATES que estén en el índice y no procesadas
     for d in SESSION_DATES:
@@ -402,13 +391,11 @@ if __name__ == "__main__":
 
         # 2. Extraer con Claude — con reintentos si la API está saturada
         prices = None
-        volumes = {}
         for attempt in range(3):
             try:
-                prices, volumes = extract_with_claude(pdf)
+                prices = extract_with_claude(pdf)
                 n_prices = sum(1 for v in prices.values() if v is not None)
-                n_vols = sum(1 for v in volumes.values() if v is not None)
-                print(f"  ✓ Extraídos {n_prices} precios, {n_vols} volúmenes")
+                print(f"  ✓ Extraídos {n_prices} precios")
                 break
             except Exception as e:
                 msg = str(e)
@@ -429,7 +416,7 @@ if __name__ == "__main__":
 
         # 3. Guardar en Supabase
         try:
-            saved = save_to_supabase(date, prices, volumes)
+            saved = save_to_supabase(date, prices, volumes if "volumes" in dir() else {})
             print(f"  ✓ Guardados {saved} registros en Supabase")
             ok += 1
         except Exception as e:
