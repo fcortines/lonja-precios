@@ -2,25 +2,25 @@ name: Extracción semanal de precios
 
 on:
   schedule:
-    - cron: '0 13 * * 2'
+    - cron: '0 14 * * 2'
   workflow_dispatch:
 
 jobs:
   extract:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout código
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Instalar dependencias
         run: pip install requests
 
-      - name: Extraer Lonja de Sevilla
+      - name: Extraer Lonja de Sevilla (sesiones recientes)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python extract_historico.py
+        run: python extract_historico.py --recent
 
       - name: Extraer Lonja de Córdoba
         env:
