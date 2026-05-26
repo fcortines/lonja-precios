@@ -8,6 +8,9 @@ on:
 jobs:
   extract:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -15,7 +18,7 @@ jobs:
       - name: Instalar dependencias
         run: pip install requests
 
-      - name: Extraer Lonja de Sevilla (sesiones recientes)
+      - name: Extraer Lonja de Sevilla
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -27,4 +30,13 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python extract_cordoba.py
+        run: python extract_cordoba.py --recent
+
+      - name: Mantener repo activo (evita que GitHub desactive el cron)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "Última actualización: $(date '+%Y-%m-%d %H:%M UTC')" > last_update.txt
+          git add last_update.txt
+          git commit -m "Auto: actualización semanal $(date '+%Y-%m-%d')"
+          git push
