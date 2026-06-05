@@ -16,23 +16,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Instalar dependencias
-        run: pip install requests
+        run: pip install requests psycopg2-binary
 
       - name: Extraer Lonja de Sevilla
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python extract_historico.py --recent
 
       - name: Extraer Lonja de Córdoba
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python extract_cordoba.py --recent
 
-      - name: Mantener repo activo (evita que GitHub desactive el cron)
+      - name: Mantener repo activo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
