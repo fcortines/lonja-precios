@@ -291,3 +291,5 @@ if __name__ == "__main__":
     print(f"  ✓ OK: {ok}  ✗ No encontrados: {len(not_found)}  ✗ Errores: {len(failed)}")
     if failed:
         print("Fallidas:", failed)
+
+# v2
