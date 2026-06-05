@@ -1,7 +1,7 @@
 """
 extract_cordoba.py
 ──────────────────
-Extrae los precios de la Lonja de Córdoba (Mesa de Cereales) y los guarda en Supabase.
+Extrae los precios y volúmenes de la Lonja de Córdoba (Mesa de Cereales).
 - Histórico 2012-2019: https://camaracordoba.com/historico-lonja/
 - Actual 2020-hoy:     https://camaracordoba.com/lonja-agraria/
 
@@ -11,57 +11,53 @@ Uso:
 """
 
 import os, re, time, base64, json, requests
+from datetime import date, timedelta
 
-ANTHROPIC_API_KEY    = os.environ.get("ANTHROPIC_API_KEY",    "TU_CLAVE_AQUI")
-SUPABASE_URL         = os.environ.get("SUPABASE_URL",         "https://vriqawhaickizakkaicc.supabase.co")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "TU_SERVICE_KEY_AQUI")
-LONJA_ID             = "cordoba"
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "TU_CLAVE_AQUI")
+DATABASE_URL      = os.environ.get("DATABASE_URL",      "TU_NEON_URL_AQUI")
+LONJA_ID          = "cordoba"
 
-PROMPT = """Extrae los precios de cereales de este PDF de la Lonja de Córdoba (Mesa de Cereales).
+PROMPT = """Extrae los precios y volumen de operaciones de este PDF de la Lonja de Córdoba (Mesa de Cereales).
 Devuelve SOLO JSON válido, sin markdown, sin texto adicional.
-Usa el valor numérico de la columna "€/Tn Agricultor" (la PRIMERA columna de precios, origen Córdoba).
+Usa el valor numérico de la columna "€/Tn Agricultor" (la PRIMERA columna de precios).
 Si un producto pone S/O, S/C, o no tiene valor, usa null.
 
-Mapeo exacto de filas del PDF a claves JSON:
-- TRIGO DURO GRUPO TD 1 (Prot>=13%, PE>=80, VIT>80%) → tdn_g1
-- TRIGO DURO GRUPO TD 2 (Prot>=12%, PE>=78, VIT>75%) → tdn_g2
-- TRIGO DURO GRUPO TD 3 (Prot>=11%, PE>=77, VIT>60%) → tdn_g3
-- TRIGO DURO GRUPO TD 4 (Prot<11% / El resto) → tdn_g4
-- TRIGO BLANDO GRUPO TB 1 (Prot>=13%, W>=300) → tbn_g1
-- TRIGO BLANDO GRUPO TB 2 (Prot>=12%, 200<=W<300) → tbn_g2
-- TRIGO BLANDO GRUPO TB 3 (Prot>=11%, 100<=W<200) → tbn_g3
-- TRIGO BLANDO GRUPO TB 4 (Prot>10%, 100<W) → tbn_g4
-- TRIGO BLANDO GRUPO TB 5 (El resto / Pienso) → tbn_pienso
+Para el volumen de operaciones:
+- "A" o "ALTO" → "A"
+- "M" o "MEDIO" → "M"
+- "B" o "BAJO" → "B"
+- vacío, S/O, S/C → null
+
+Mapeo exacto:
+- TRIGO DURO GRUPO TD 1 → tdn_g1
+- TRIGO DURO GRUPO TD 2 → tdn_g2
+- TRIGO DURO GRUPO TD 3 → tdn_g3
+- TRIGO DURO GRUPO TD 4 → tdn_g4
+- TRIGO BLANDO GRUPO TB 1 → tbn_g1
+- TRIGO BLANDO GRUPO TB 2 → tbn_g2
+- TRIGO BLANDO GRUPO TB 3 → tbn_g3
+- TRIGO BLANDO GRUPO TB 4 → tbn_g4
+- TRIGO BLANDO GRUPO TB 5 → tbn_pienso
 - TRITICALE → trit_nac
 - CEBADA → cebada_nac
 - AVENA → avena_nac
 - MAIZ → maiz_nac
 - SORGO → sorgo_nac
 - HABAS → habas_nac
-- GIRASOL ALTO OLEICO (>=80%) → girasol_alto
-- GIRASOL (convencional 9-2-44) → girasol_conv
+- GIRASOL ALTO OLEICO → girasol_alto
+- GIRASOL convencional → girasol_conv
 - COLZA → colza
 - GUISANTES → guisan_nac
 
-{
-  "tbn_g1":null,"tbn_g2":null,"tbn_g3":null,"tbn_g4":null,"tbn_pienso":null,
-  "tdn_g1":null,"tdn_g2":null,"tdn_g3":null,"tdn_g4":null,
-  "trit_nac":null,"cebada_nac":null,"avena_nac":null,
-  "maiz_nac":null,"sorgo_nac":null,
-  "habas_nac":null,"girasol_alto":null,"girasol_conv":null,
-  "colza":null,"guisan_nac":null
-}"""
+{"prices":{"tbn_g1":null,"tbn_g2":null,"tbn_g3":null,"tbn_g4":null,"tbn_pienso":null,"tdn_g1":null,"tdn_g2":null,"tdn_g3":null,"tdn_g4":null,"trit_nac":null,"cebada_nac":null,"avena_nac":null,"maiz_nac":null,"sorgo_nac":null,"habas_nac":null,"girasol_alto":null,"girasol_conv":null,"colza":null,"guisan_nac":null},"volumes":{"tbn_g1":null,"tbn_g2":null,"tbn_g3":null,"tbn_g4":null,"tbn_pienso":null,"tdn_g1":null,"tdn_g2":null,"tdn_g3":null,"tdn_g4":null,"trit_nac":null,"cebada_nac":null,"avena_nac":null,"maiz_nac":null,"sorgo_nac":null,"habas_nac":null,"girasol_alto":null,"girasol_conv":null,"colza":null,"guisan_nac":null}}"""
 
 
 def scrape_cordoba_urls():
-    """Obtiene PDFs de cereales de ambas páginas: histórico (2012-2019) y actual (2020-)"""
     all_links = {}
-
     pages = [
         "https://camaracordoba.com/historico-lonja/",
         "https://camaracordoba.com/lonja-agraria/",
     ]
-
     for page_url in pages:
         print(f"  Scraping: {page_url}")
         try:
@@ -73,91 +69,49 @@ def scrape_cordoba_urls():
             print(f"    ✗ Error: {e}")
             continue
 
-        # Find all PDF links in the page
-        # Pattern 1: href="...pdf" with date text DD/MM/YYYY
         links_raw = re.findall(r'href=["\']([^"\']+\.pdf)["\']', html, re.IGNORECASE)
-
         for url in links_raw:
             url_lower = url.lower()
-
-            # Skip non-cereal links
-            if any(x in url_lower for x in ["citrico", "carnic", "almendra", "bovino",
-                                              "porcino", "ovino", "citrus"]):
+            if any(x in url_lower for x in ["citrico","carnic","almendra","bovino","porcino","ovino"]):
                 continue
-
             full_url = url if url.startswith("http") else "https://camaracordoba.com" + url
-
-            # Try to extract date from URL
             date_str = None
-
-            # Pattern A: YYYYMMDD in filename (2020+): Acta-Mesa-de-Cereales-20240514.pdf
             m = re.search(r'(\d{4})(\d{2})(\d{2})(?:\.pdf|_)', url, re.IGNORECASE)
             if m:
                 y, mo, d = m.group(1), m.group(2), m.group(3)
                 if 2010 <= int(y) <= 2030 and 1 <= int(mo) <= 12 and 1 <= int(d) <= 31:
                     date_str = f"{y}-{mo}-{d}"
-
-            # Pattern B: YYYY-MM-DD in filename (2019 and some 2020+)
             if not date_str:
                 m = re.search(r'(\d{4})-(\d{2})-(\d{2})', url)
                 if m:
                     y, mo, d = m.group(1), m.group(2), m.group(3)
                     if 2010 <= int(y) <= 2030:
                         date_str = f"{y}-{mo}-{d}"
-
             if date_str:
-                # Only overwrite if this looks more like a cereal link
                 if date_str not in all_links or "cereal" in url_lower:
                     all_links[date_str] = full_url
 
-        # Also handle WordPress page links (some 2022 sessions are pages not PDFs)
-        page_links = re.findall(
-            r'href=["\']([^"\']+camaracordoba\.com/[^"\']+cereales[^"\']*)["\']',
-            html, re.IGNORECASE)
-        for link in page_links:
-            if link.endswith(".pdf"):
-                continue  # already handled above
-            m = re.search(r'(\d{4})-(\d{2})-(\d{2})', link)
-            if m:
-                y, mo, d = m.group(1), m.group(2), m.group(3)
-                date_str = f"{y}-{mo}-{d}"
-                if date_str not in all_links:
-                    all_links[date_str] = link
-
-    print(f"  Total sesiones de cereales: {len(all_links)}")
+    print(f"  Total sesiones encontradas: {len(all_links)}")
     return all_links
 
 
-def get_pdf_from_page(page_url):
-    """Para links que son páginas WordPress, busca el PDF embebido"""
-    try:
-        r = requests.get(page_url, timeout=20,
-            headers={"User-Agent": "Mozilla/5.0"})
-        if not r.ok:
-            return None
-        # Find PDF link in page
-        pdfs = re.findall(r'href=["\']([^"\']+\.pdf)["\']', r.text, re.IGNORECASE)
-        for pdf in pdfs:
-            if any(x in pdf.lower() for x in ["cereal", "lonja", "acta", "mesa"]):
-                return pdf if pdf.startswith("http") else "https://camaracordoba.com" + pdf
-        # Return first PDF found
-        if pdfs:
-            url = pdfs[0]
-            return url if url.startswith("http") else "https://camaracordoba.com" + url
-    except:
-        pass
-    return None
+def get_recent_cordoba_urls():
+    """Para GitHub Action: prueba URLs de los últimos martes directamente"""
+    today = date.today()
+    candidates = {}
+    d = today
+    for _ in range(20):
+        if d.weekday() == 1:  # martes
+            date_str = d.strftime("%Y-%m-%d")
+            date_compact = d.strftime("%Y%m%d")
+            candidates[date_str] = f"https://camaracordoba.com/wp-content/uploads/actas-mesa-de-cereales/Acta-Mesa-de-Cereales-{date_compact}.pdf"
+        d -= timedelta(days=1)
+    return candidates
 
 
 def download_pdf(url):
-    # If it's a WordPress page (not a PDF), extract the embedded PDF URL first
     if not url.lower().endswith(".pdf"):
-        pdf_url = get_pdf_from_page(url)
-        if pdf_url:
-            url = pdf_url
-        else:
-            return None
-
+        return None
     try:
         r = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
         ct = r.headers.get("content-type", "")
@@ -179,7 +133,7 @@ def extract_with_claude(pdf_bytes):
     }
     body = {
         "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 800,
+        "max_tokens": 1200,
         "messages": [{
             "role": "user",
             "content": [
@@ -196,28 +150,34 @@ def extract_with_claude(pdf_bytes):
     r.raise_for_status()
     text = "".join(b.get("text", "") for b in r.json()["content"])
     text = re.sub(r"```json|```", "", text).strip()
-    return json.loads(text)
+    data = json.loads(text)
+    if "prices" in data:
+        return data["prices"], data.get("volumes", {})
+    return data, {}
 
 
-def save_to_supabase(date_str, prices):
-    rows = [
-        {"lonja_id": LONJA_ID, "session_date": date_str, "product_key": k, "price": v}
-        for k, v in prices.items() if v is not None
-    ]
+def save_to_supabase(date_str, prices, volumes=None):
+    if volumes is None:
+        volumes = {}
+    rows = []
+    for k, v in prices.items():
+        if v is not None:
+            vol = volumes.get(k)
+            rows.append((LONJA_ID, date_str, k, v, vol if vol in ("A","M","B") else None))
     if not rows:
         return 0
-    headers = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=minimal",
-    }
-    r = requests.post(
-        f"{SUPABASE_URL}/rest/v1/prices?on_conflict=lonja_id,session_date,product_key",
-        json=rows, headers=headers, timeout=20)
-    if not r.ok:
-        print(f"    Supabase error {r.status_code}: {r.text[:200]}")
-    r.raise_for_status()
+    import psycopg2
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.executemany("""
+        INSERT INTO prices (lonja_id, session_date, product_key, price, volume)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (lonja_id, session_date, product_key)
+        DO UPDATE SET price=EXCLUDED.price, volume=EXCLUDED.volume
+    """, rows)
+    conn.commit()
+    cur.close()
+    conn.close()
     return len(rows)
 
 
@@ -234,66 +194,71 @@ def get_existing_dates():
 
 
 def delete_all_cordoba():
-    headers = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-    }
-    r = requests.delete(
-        f"{SUPABASE_URL}/rest/v1/prices?lonja_id=eq.{LONJA_ID}",
-        headers=headers, timeout=20)
-    r.raise_for_status()
+    import psycopg2
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM prices WHERE lonja_id=%s", (LONJA_ID,))
+    conn.commit()
+    cur.close()
+    conn.close()
     print("  ✓ Datos anteriores de Córdoba borrados")
 
 
 if __name__ == "__main__":
     import sys
     reset_mode = "--reset" in sys.argv
+    recent_mode = "--recent" in sys.argv
 
     print("=" * 60)
-    print("Extracción histórica · Lonja de Córdoba")
+    print("Extracción · Lonja de Córdoba")
     print("=" * 60)
 
-    if "TU_CLAVE" in ANTHROPIC_API_KEY or "TU_SERVICE" in SUPABASE_SERVICE_KEY:
+    if "TU_CLAVE" in ANTHROPIC_API_KEY or "TU_NEON" in DATABASE_URL:
         print("\n⚠️  Configura tus claves")
         exit(1)
 
     if reset_mode:
-        print("\n→ Modo RESET: borrando datos anteriores de Córdoba...")
+        print("\n→ Modo RESET...")
         delete_all_cordoba()
 
     print("\n→ Consultando fechas ya procesadas...")
     existing = get_existing_dates()
     print(f"  Ya procesadas: {len(existing)} sesiones")
 
-    print("\n→ Descargando índice de cotizaciones de Córdoba...")
-    pdf_index = scrape_cordoba_urls()
+    if recent_mode:
+        print("\n→ Modo reciente: buscando sesiones nuevas...")
+        pdf_index = get_recent_cordoba_urls()
+    else:
+        print("\n→ Descargando índice de cotizaciones...")
+        pdf_index = scrape_cordoba_urls()
 
     pending = [(d, pdf_index[d]) for d in sorted(pdf_index.keys()) if d not in existing]
     print(f"  Pendientes: {len(pending)} sesiones")
 
     if not pending:
-        print("\n✓ Todo el histórico de Córdoba ya está cargado.")
+        print("\n✓ Todo al día.")
         exit(0)
 
     ok, failed, not_found = 0, [], []
 
-    for i, (date, url) in enumerate(pending):
-        print(f"\n[{i+1}/{len(pending)}] {date}")
+    for i, (session_date, url) in enumerate(pending):
+        print(f"\n[{i+1}/{len(pending)}] {session_date}")
         print(f"  URL: {url}")
 
         pdf = download_pdf(url)
         if pdf is None:
             print(f"  ✗ PDF no descargable")
-            not_found.append(date)
+            not_found.append(session_date)
             continue
         print(f"  ✓ PDF descargado ({len(pdf)//1024} KB)")
 
-        prices = None
+        prices, volumes = None, {}
         for attempt in range(3):
             try:
-                prices = extract_with_claude(pdf)
-                n = sum(1 for v in prices.values() if v is not None)
-                print(f"  ✓ Extraídos {n} precios")
+                prices, volumes = extract_with_claude(pdf)
+                n_p = sum(1 for v in prices.values() if v is not None)
+                n_v = sum(1 for v in volumes.values() if v is not None)
+                print(f"  ✓ Extraídos {n_p} precios, {n_v} volúmenes")
                 break
             except Exception as e:
                 msg = str(e)
@@ -303,32 +268,26 @@ if __name__ == "__main__":
                     time.sleep(wait)
                 else:
                     print(f"  ✗ Error extracción: {e}")
-                    failed.append(date)
+                    failed.append(session_date)
                     time.sleep(3)
                     break
 
         if prices is None:
-            if date not in failed:
-                failed.append(date)
+            if session_date not in failed:
+                failed.append(session_date)
             continue
 
         try:
-            saved = save_to_supabase(date, prices)
-            print(f"  ✓ Guardados {saved} registros en Supabase")
+            saved = save_to_supabase(session_date, prices, volumes)
+            print(f"  ✓ Guardados {saved} registros")
             ok += 1
         except Exception as e:
             print(f"  ✗ Error Supabase: {e}")
-            failed.append(date)
+            failed.append(session_date)
 
         time.sleep(3)
 
     print("\n" + "=" * 60)
-    print("RESUMEN")
-    print("=" * 60)
-    print(f"  ✓ Procesadas correctamente: {ok}")
-    print(f"  ✗ PDFs no descargables:     {len(not_found)}")
-    print(f"  ✗ Errores de extracción:    {len(failed)}")
+    print(f"  ✓ OK: {ok}  ✗ No encontrados: {len(not_found)}  ✗ Errores: {len(failed)}")
     if failed:
-        print(f"\nFallidas:")
-        for d in failed: print(f"  {d}")
-    print("\nListo.")
+        print("Fallidas:", failed)
