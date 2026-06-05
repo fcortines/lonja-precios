@@ -1,4 +1,4 @@
-name: Extracción semanal de precios
+name: Extracción semanal v2
 
 on:
   schedule:
