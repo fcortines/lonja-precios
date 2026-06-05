@@ -34,8 +34,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main --rebase
           echo "Última actualización: $(date '+%Y-%m-%d %H:%M UTC')" > last_update.txt
           git add last_update.txt
           git commit -m "Auto: actualización semanal $(date '+%Y-%m-%d')" || true
-          git pull origin main --rebase
           git push origin main
