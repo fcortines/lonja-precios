@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from './supabase.js'
+// Neon DB via API route
 import Dashboard from './Dashboard.jsx'
 
 // ── Available lonjas (add more here when ready) ───────────────────────────────
@@ -15,14 +15,14 @@ const LONJAS = [
     since: '2015',
   },
   {
-    id: 'cordoba',
-    name: 'Lonja de Córdoba',
-    region: 'Córdoba',
-    flag: '🌻',
+    id: 'extremadura',
+    name: 'Lonja de Extremadura',
+    region: 'Extremadura',
+    flag: '🌿',
     color: '#16a34a',
-    active: true,
-    sessions: 280,
-    since: '2012',
+    active: false,
+    sessions: null,
+    since: null,
   },
   {
     id: 'albacete',
@@ -390,22 +390,12 @@ function LonjaSelector({ onSelect }) {
           ) : null /* escritorio: no mostrar nada */}
         </div>
 
-        <div style={{
-          textAlign: 'center', marginTop: 20,
-          fontFamily: "'DM Mono',monospace", fontSize: 11,
-          display: 'flex', flexDirection: 'column', gap: 6
+        <p style={{
+          textAlign: 'center', marginTop: 20, fontSize: 11,
+          color: '#cbd5e1', fontFamily: "'DM Mono',monospace"
         }}>
-          <p style={{ color: '#cbd5e1', margin: 0 }}>
-            Datos extraídos de los PDFs de cada lonja · 2015–2026
-          </p>
-          <p style={{ color: '#94a3b8', margin: 0 }}>
-            ¿Sugerencias o errores?{' '}
-            <a href="mailto:contacto@lonja-precios.es"
-               style={{ color: '#0284c7', textDecoration: 'none', fontWeight: 600 }}>
-              contacto@lonja-precios.es
-            </a>
-          </p>
-        </div>
+          Datos extraídos de los PDFs de cada lonja · 2015–2026
+        </p>
       </div>
     </div>
   )
@@ -464,30 +454,13 @@ export default function App() {
     setDataError(null)
 
     async function fetchAllRows() {
-      const PAGE = 1000  // Supabase default max per request
-      let allRows = []
-      let from = 0
-      let hasMore = true
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('prices')
-          .select('session_date, product_key, price, volume')
-          .eq('lonja_id', lonja.id)
-          .order('session_date', { ascending: true })
-          .range(from, from + PAGE - 1)
-
-        if (error) throw error
-        allRows = allRows.concat(data || [])
-        hasMore = (data && data.length === PAGE)
-        from += PAGE
-      }
-      return allRows
+      const response = await fetch(`/api/prices?lonja_id=${lonja.id}`)
+      if (!response.ok) throw new Error(`Error ${response.status}`)
+      return await response.json()
     }
 
     fetchAllRows()
       .then(rows => {
-        // All product keys — to ensure missing ones are null not undefined
         const ALL_KEYS = [
           "tbn_g1","tbn_g2","tbn_g3","tbn_g4","tbn_pienso",
           "tdn_g1","tdn_g2","tdn_g3","tdn_g4",
@@ -500,20 +473,16 @@ export default function App() {
           "guisan_nac","guisan_imp",
           "girasol_alto","girasol_conv","colza"
         ]
-        // Convert flat rows → [{date, tbn_g1: 212, ..., vol_tbn_g1: "A", ...}]
         const byDate = {}
         rows.forEach(row => {
-          if (!byDate[row.session_date]) {
-            const empty = { date: row.session_date }
+          const d = row.session_date
+          if (!byDate[d]) {
+            const empty = { date: d }
             ALL_KEYS.forEach(k => { empty[k] = null; empty['vol_'+k] = null })
-            byDate[row.session_date] = empty
+            byDate[d] = empty
           }
-          if (row.price != null) {
-            byDate[row.session_date][row.product_key] = row.price
-          }
-          if (row.volume != null) {
-            byDate[row.session_date]['vol_'+row.product_key] = row.volume
-          }
+          if (row.price != null) byDate[d][row.product_key] = row.price
+          if (row.volume != null) byDate[d]['vol_'+row.product_key] = row.volume
         })
         const timeline = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
         setAllData(timeline)
