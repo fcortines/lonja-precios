@@ -16,10 +16,9 @@ Variables de entorno:
 import os, re, time, base64, json, requests
 from datetime import datetime, date, timedelta
 
-ANTHROPIC_API_KEY    = os.environ.get("ANTHROPIC_API_KEY",    "TU_CLAVE_AQUI")
-SUPABASE_URL         = os.environ.get("SUPABASE_URL",         "https://vriqawhaickizakkaicc.supabase.co")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "TU_SERVICE_KEY_AQUI")
-LONJA_ID             = "sevilla"
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "TU_CLAVE_AQUI")
+DATABASE_URL      = os.environ.get("DATABASE_URL",      "TU_NEON_URL_AQUI")
+LONJA_ID          = "sevilla"
 
 MESES = {
     "01":"enero","02":"febrero","03":"marzo","04":"abril",
@@ -329,51 +328,43 @@ def save_to_supabase(date_str, prices, volumes=None):
     for k, v in prices.items():
         if v is not None:
             vol = volumes.get(k)
-            rows.append({
-                "lonja_id": LONJA_ID,
-                "session_date": date_str,
-                "product_key": k,
-                "price": v,
-                "volume": vol if vol in ("A", "M", "B") else None
-            })
+            rows.append((LONJA_ID, date_str, k, v, vol if vol in ("A","M","B") else None))
     if not rows:
         return 0
-    headers = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=minimal",
-    }
-    r = requests.post(
-        f"{SUPABASE_URL}/rest/v1/prices?on_conflict=lonja_id,session_date,product_key",
-        json=rows, headers=headers, timeout=20)
-    if not r.ok:
-        print(f"    Supabase error {r.status_code}: {r.text[:200]}")
-    r.raise_for_status()
+    import psycopg2
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.executemany("""
+        INSERT INTO prices (lonja_id, session_date, product_key, price, volume)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (lonja_id, session_date, product_key)
+        DO UPDATE SET price=EXCLUDED.price, volume=EXCLUDED.volume
+    """, rows)
+    conn.commit()
+    cur.close()
+    conn.close()
     return len(rows)
 
 
 def get_existing_dates():
-    headers = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-    }
-    r = requests.get(
-        f"{SUPABASE_URL}/rest/v1/prices?lonja_id=eq.{LONJA_ID}&select=session_date",
-        headers=headers, timeout=20)
-    r.raise_for_status()
-    return set(row["session_date"] for row in r.json())
+    import psycopg2
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT session_date::text FROM prices WHERE lonja_id=%s", (LONJA_ID,))
+    dates = set(row[0] for row in cur.fetchall())
+    cur.close()
+    conn.close()
+    return dates
 
 
 def delete_all():
-    headers = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-    }
-    r = requests.delete(
-        f"{SUPABASE_URL}/rest/v1/prices?lonja_id=eq.{LONJA_ID}",
-        headers=headers, timeout=20)
-    r.raise_for_status()
+    import psycopg2
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM prices WHERE lonja_id=%s", (LONJA_ID,))
+    conn.commit()
+    cur.close()
+    conn.close()
     print("  ✓ Datos anteriores borrados")
 
 
@@ -401,7 +392,7 @@ if __name__ == "__main__":
     print("Extracción histórica · Lonja de Sevilla")
     print("=" * 60)
 
-    if "TU_CLAVE" in ANTHROPIC_API_KEY or "TU_SERVICE" in SUPABASE_SERVICE_KEY:
+    if "TU_CLAVE" in ANTHROPIC_API_KEY or "TU_NEON" in DATABASE_URL:
         print("\n⚠️  Configura tus claves")
         exit(1)
 
