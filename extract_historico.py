@@ -368,19 +368,80 @@ def delete_all():
     print("  ✓ Datos anteriores borrados")
 
 
+def scrape_recent_urls():
+    """
+    Scraping del índice de lonjadesevilla.com/cotizaciones/ para obtener
+    las URLs reales de las últimas sesiones. Necesario porque la Lonja
+    usa nombres de archivo inconsistentes (guiones, underscores, typos).
+    """
+    MESES_INV = {
+        "enero":"01","febrero":"02","marzo":"03","abril":"04",
+        "mayo":"05","junio":"06","julio":"07","agosto":"08",
+        "septiembre":"09","octubre":"10","noviembre":"11","diciembre":"12"
+    }
+    all_links = {}
+    headers_scrape = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-ES,es;q=0.9",
+    }
+
+    # Scrape el año actual y el anterior para cubrir sesiones recientes
+    today = date.today()
+    years = [str(today.year), str(today.year - 1)]
+
+    for year in years:
+        try:
+            url = f"https://lonjadesevilla.com/cotizaciones/?anyo={year}"
+            r = requests.get(url, timeout=20, headers=headers_scrape)
+            if not r.ok:
+                # Probar sin parámetro
+                r = requests.get("https://lonjadesevilla.com/cotizaciones/",
+                    timeout=20, headers=headers_scrape)
+            if r.ok:
+                html = r.text
+                # Buscar todos los enlaces a PDFs
+                pdf_links = re.findall(r'href=["\']([^"\']*\.pdf)["\']', html, re.IGNORECASE)
+                for link in pdf_links:
+                    if year not in link and str(int(year)-1) not in link:
+                        continue
+                    full_url = link if link.startswith("http") else "https://lonjadesevilla.com" + link
+                    fname = link.split("/")[-1].replace(".pdf","").replace("-","_").lower()
+                    # Extraer fecha del nombre del archivo
+                    m = re.search(r'(\d{1,2})_de_([a-z]+)_(?:de_)?(\d{4})', fname)
+                    if m:
+                        dd, mes_str, yy = m.group(1), m.group(2), m.group(3)
+                        mes_num = MESES_INV.get(mes_str)
+                        if mes_num:
+                            date_str = f"{yy}-{mes_num}-{dd.zfill(2)}"
+                            all_links[date_str] = full_url
+        except Exception as e:
+            print(f"  ⚠ Error scraping {year}: {e}")
+
+    return all_links
+
+
 def get_recent_sessions():
     """
-    Para el GitHub Action: busca sesiones nuevas en los últimos 14 días.
-    Genera fechas de martes recientes y prueba si existe el PDF.
+    Para el GitHub Action: obtiene URLs reales haciendo scraping del índice.
+    Si el scraping falla, usa URLs construidas como fallback.
     """
-    today = date.today()
-    candidates = []
-    d = today
-    for _ in range(20):  # buscar en los últimos ~20 días
-        if d.weekday() == 1:  # martes
-            candidates.append(d.strftime("%Y-%m-%d"))
-        d -= timedelta(days=1)
-    return candidates
+    print("  Obteniendo URLs reales del índice de la Lonja...")
+    scraped = scrape_recent_urls()
+    if scraped:
+        print(f"  {len(scraped)} URLs encontradas por scraping")
+        return list(scraped.keys()), scraped
+    else:
+        # Fallback: generar fechas de martes recientes
+        print("  ⚠ Scraping falló, usando URLs construidas como fallback")
+        today = date.today()
+        candidates = []
+        d = today
+        for _ in range(20):
+            if d.weekday() == 1:
+                candidates.append(d.strftime("%Y-%m-%d"))
+            d -= timedelta(days=1)
+        return candidates, {}
 
 
 if __name__ == "__main__":
@@ -405,11 +466,12 @@ if __name__ == "__main__":
     print(f"  Ya procesadas: {len(existing)} sesiones")
 
     if recent_mode:
-        # GitHub Action: solo busca sesiones recientes (últimas 3 semanas)
         print("\n→ Modo reciente: buscando sesiones nuevas...")
-        candidates = get_recent_sessions()
+        candidates, scraped_urls = get_recent_sessions()
+        # Merge scraped URLs into HISTORICAL_URLS for lookup
+        HISTORICAL_URLS.update(scraped_urls)
         pending = [(d, get_url(d)) for d in candidates if d not in existing]
-        print(f"  Candidatas: {len(pending)} fechas de martes recientes")
+        print(f"  Candidatas: {len(pending)} sesiones nuevas")
     else:
         # Modo completo: todas las fechas conocidas
         all_dates = sorted(set(list(HISTORICAL_URLS.keys())))
