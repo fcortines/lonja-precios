@@ -175,156 +175,198 @@ function calcSignal(k, allData) {
       desc:"Datos insuficientes para calcular señal.", criterios:[]};
   }
 
-  // Get all rows with a real value for this product
-  var rows = allData.filter(function(r){ return r[k] != null; });
+  // Helper: parse a value safely as float
+  function pf(v) { var n = parseFloat(v); return isFinite(n) ? n : null; }
+
+  // Only rows where this product has a valid numeric price
+  var rows = allData.filter(function(r){
+    return pf(r[k]) !== null;
+  });
   if (rows.length < 6) {
     return {s:"S/D", color:"#64748b", bg:"#f1f5f9", icon:"—",
-      desc:"Datos insuficientes para este producto.", criterios:[]};
+      desc:"Este producto tiene pocos datos históricos.", criterios:[]};
   }
 
-  var last = rows[rows.length - 1];
-  var currentPrice = last[k];
+  var last         = rows[rows.length - 1];
+  var currentPrice = pf(last[k]);
   var currentDate  = last.date;
-  var currentMonth = parseInt(currentDate.slice(5,7));
-
-  // ── Criterio 1: Posición en campaña actual ────────────────────────────────
-  // Campaña = oct-oct. Encuentra la campaña actual
-  var campStart, campEnd;
   var cy = parseInt(currentDate.slice(0,4));
   var cm = parseInt(currentDate.slice(5,7));
-  if (cm >= 10) {
-    campStart = cy + "-10-01"; campEnd = (cy+1) + "-09-30";
-  } else {
-    campStart = (cy-1) + "-10-01"; campEnd = cy + "-09-30";
-  }
-  var campRows = rows.filter(function(r){ return r.date >= campStart && r.date <= campEnd; });
-  var campVals = campRows.map(function(r){ return r[k]; });
-  var campMin = Math.min.apply(null, campVals);
-  var campMax = Math.max.apply(null, campVals);
-  var campRange = campMax - campMin;
-  var campPos = campRange > 0 ? (currentPrice - campMin) / campRange : 0.5;
+
+  // ── Criterio 1: Posición en campaña actual (oct-oct) ─────────────────────
+  var campStart = (cm >= 10 ? cy : cy-1) + "-10-01";
+  var campEnd   = (cm >= 10 ? cy+1 : cy) + "-09-30";
+  var campVals  = rows
+    .filter(function(r){ return r.date >= campStart && r.date <= campEnd; })
+    .map(function(r){ return pf(r[k]); })
+    .filter(function(v){ return v !== null; });
+
   var c1, c1desc;
-  if (campPos >= 0.67) {
-    c1 = "VENDER";
-    c1desc = "Precio en tercio superior de campaña (" + Math.round(campPos*100) + "% del rango). Nivel favorable para vender.";
-  } else if (campPos <= 0.33) {
-    c1 = "AGUANTAR";
-    c1desc = "Precio en tercio inferior de campaña (" + Math.round(campPos*100) + "% del rango). Esperar recuperación.";
+  if (campVals.length < 3) {
+    c1 = "NEUTRAL"; c1desc = "Campaña actual con pocas sesiones todavía.";
   } else {
-    c1 = "NEUTRAL";
-    c1desc = "Precio en zona media de campaña (" + Math.round(campPos*100) + "% del rango).";
+    var cMin = Math.min.apply(null, campVals);
+    var cMax = Math.max.apply(null, campVals);
+    var cRange = cMax - cMin;
+    var cPos = cRange > 0 ? (currentPrice - cMin) / cRange : 0.5;
+    if (cPos >= 0.67) {
+      c1 = "VENDER";
+      c1desc = "El precio actual (" + currentPrice + "€) está en el tercio alto de la campaña, cerca del máximo de " + cMax.toFixed(0) + "€. Buen nivel para vender.";
+    } else if (cPos <= 0.33) {
+      c1 = "AGUANTAR";
+      c1desc = "El precio actual (" + currentPrice + "€) está en el tercio bajo de la campaña, cerca del mínimo de " + cMin.toFixed(0) + "€. Mejor esperar una recuperación.";
+    } else {
+      c1 = "NEUTRAL";
+      c1desc = "El precio actual (" + currentPrice + "€) está en la zona media de la campaña (rango " + cMin.toFixed(0) + "–" + cMax.toFixed(0) + "€).";
+    }
   }
 
   // ── Criterio 2: Tendencia reciente (últimas 4 sesiones) ──────────────────
-  var recent = rows.slice(-5);
-  var trend = 0;
+  var recent    = rows.slice(-5);
+  var changes   = [];
   for (var i = 1; i < recent.length; i++) {
-    trend += recent[i][k] - recent[i-1][k];
+    var diff = pf(recent[i][k]) - pf(recent[i-1][k]);
+    if (isFinite(diff)) changes.push(diff);
   }
-  trend = trend / (recent.length - 1); // media de cambios
+  var trend = changes.length > 0
+    ? changes.reduce(function(s,v){ return s+v; }, 0) / changes.length
+    : 0;
+
   var c2, c2desc;
   if (trend > 1.5) {
     c2 = "VENDER";
-    c2desc = "Tendencia alcista: +" + trend.toFixed(1) + "€/sesión en las últimas " + (recent.length-1) + " sesiones. Aprovechar el momento.";
+    c2desc = "Subida de +" + trend.toFixed(1) + "€ por sesión de media en las últimas " + changes.length + " semanas. La tendencia es alcista — buen momento para vender.";
   } else if (trend < -1.5) {
     c2 = "AGUANTAR";
-    c2desc = "Tendencia bajista: " + trend.toFixed(1) + "€/sesión en las últimas " + (recent.length-1) + " sesiones. Esperar estabilización.";
+    c2desc = "Bajada de " + trend.toFixed(1) + "€ por sesión de media en las últimas " + changes.length + " semanas. La tendencia es bajista — esperar a que se estabilice.";
   } else {
     c2 = "NEUTRAL";
-    c2desc = "Precio estable: variación media de " + trend.toFixed(1) + "€/sesión.";
+    c2desc = "Precio estable en las últimas " + changes.length + " semanas (variación media de " + (trend >= 0 ? "+" : "") + trend.toFixed(1) + "€ por sesión).";
   }
 
   // ── Criterio 3: Estacionalidad histórica ─────────────────────────────────
-  // Calcular el precio medio de cada mes sobre todo el histórico (normalizado)
-  var monthAvgs = {};
-  var monthCounts = {};
+  var monthSums = {}, monthCounts = {};
   rows.forEach(function(r) {
+    var v = pf(r[k]);
+    if (v === null) return;
     var m = parseInt(r.date.slice(5,7));
-    if (!monthAvgs[m]) { monthAvgs[m] = 0; monthCounts[m] = 0; }
-    monthAvgs[m] += r[k];
-    monthCounts[m]++;
+    monthSums[m]   = (monthSums[m]   || 0) + v;
+    monthCounts[m] = (monthCounts[m] || 0) + 1;
   });
-  var globalAvg = rows.reduce(function(s,r){ return s + r[k]; }, 0) / rows.length;
-  Object.keys(monthAvgs).forEach(function(m) {
-    monthAvgs[m] = monthAvgs[m] / monthCounts[m];
+
+  var allVals    = rows.map(function(r){ return pf(r[k]); }).filter(function(v){ return v !== null; });
+  var globalAvg  = allVals.reduce(function(s,v){ return s+v; }, 0) / allVals.length;
+  var monthAvgs  = {};
+  Object.keys(monthSums).forEach(function(m) {
+    monthAvgs[m] = monthSums[m] / monthCounts[m];
   });
-  // Rank del mes actual vs todos los meses
-  var currentMonthAvg = monthAvgs[currentMonth] || globalAvg;
-  var monthValues = Object.values(monthAvgs).sort(function(a,b){ return a-b; });
-  var monthRank = monthValues.indexOf(currentMonthAvg) / (monthValues.length - 1);
+
   var MONTH_NAMES = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
     7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"};
-  var pctVsAvg = ((currentMonthAvg - globalAvg) / globalAvg * 100).toFixed(1);
+
   var c3, c3desc;
-  if (monthRank >= 0.67) {
-    c3 = "VENDER";
-    c3desc = MONTH_NAMES[currentMonth] + " históricamente es un mes de precios altos (" +
-      (pctVsAvg > 0 ? "+" : "") + pctVsAvg + "% vs media anual). Patrón estacional favorable para vender.";
-  } else if (monthRank <= 0.33) {
-    c3 = "AGUANTAR";
-    c3desc = MONTH_NAMES[currentMonth] + " históricamente es un mes de precios bajos (" +
-      (pctVsAvg > 0 ? "+" : "") + pctVsAvg + "% vs media anual). Esperar mejores meses.";
+  var curMonthAvg = monthAvgs[cm];
+  if (!curMonthAvg || !isFinite(globalAvg) || globalAvg === 0) {
+    c3 = "NEUTRAL"; c3desc = "Sin suficientes datos históricos para este mes.";
   } else {
-    c3 = "NEUTRAL";
-    c3desc = MONTH_NAMES[currentMonth] + " con estacionalidad neutra (" +
-      (pctVsAvg > 0 ? "+" : "") + pctVsAvg + "% vs media anual).";
+    var monthVals  = Object.values(monthAvgs).filter(function(v){ return isFinite(v); }).sort(function(a,b){ return a-b; });
+    var monthRank  = monthVals.length > 1
+      ? monthVals.indexOf(curMonthAvg) / (monthVals.length - 1)
+      : 0.5;
+    var pctVsAvg   = ((curMonthAvg - globalAvg) / globalAvg * 100).toFixed(1);
+    var sign       = parseFloat(pctVsAvg) >= 0 ? "+" : "";
+    if (monthRank >= 0.67) {
+      c3 = "VENDER";
+      c3desc = MONTH_NAMES[cm] + " es históricamente uno de los mejores meses para vender (" + sign + pctVsAvg + "% sobre la media anual). El patrón estacional favorece vender ahora.";
+    } else if (monthRank <= 0.33) {
+      c3 = "AGUANTAR";
+      c3desc = MONTH_NAMES[cm] + " es históricamente uno de los peores meses para vender (" + sign + pctVsAvg + "% sobre la media anual). Suele haber mejores oportunidades en otros meses.";
+    } else {
+      c3 = "NEUTRAL";
+      c3desc = MONTH_NAMES[cm] + " tiene comportamiento estacional neutro (" + sign + pctVsAvg + "% sobre la media anual). No hay ventaja clara por el mes.";
+    }
   }
 
-  // ── Criterio 4: Desviación sobre media histórica 3 años ──────────────────
-  var cutoff3y = new Date(currentDate);
-  cutoff3y.setFullYear(cutoff3y.getFullYear() - 3);
-  var cutoff3yStr = cutoff3y.toISOString().slice(0,10);
-  var rows3y = rows.filter(function(r){ return r.date >= cutoff3yStr; });
-  var avg3y = rows3y.length > 0
-    ? rows3y.reduce(function(s,r){ return s + r[k]; }, 0) / rows3y.length
-    : globalAvg;
-  var devPct = ((currentPrice - avg3y) / avg3y * 100).toFixed(1);
+  // ── Criterio 4: Desviación sobre media últimos 3 años ────────────────────
+  var cutoff = new Date(currentDate);
+  cutoff.setFullYear(cutoff.getFullYear() - 3);
+  var cutoffStr = cutoff.toISOString().slice(0,10);
+  var vals3y = rows
+    .filter(function(r){ return r.date >= cutoffStr; })
+    .map(function(r){ return pf(r[k]); })
+    .filter(function(v){ return v !== null; });
+
   var c4, c4desc;
-  if (parseFloat(devPct) >= 8) {
-    c4 = "VENDER";
-    c4desc = "Precio actual +" + devPct + "% sobre media de 3 años (" + avg3y.toFixed(0) + "€). Precio históricamente alto.";
-  } else if (parseFloat(devPct) <= -8) {
-    c4 = "AGUANTAR";
-    c4desc = "Precio actual " + devPct + "% bajo media de 3 años (" + avg3y.toFixed(0) + "€). Precio históricamente bajo.";
+  if (vals3y.length < 5) {
+    c4 = "NEUTRAL"; c4desc = "Sin suficientes datos de los últimos 3 años.";
   } else {
-    c4 = "NEUTRAL";
-    c4desc = "Precio en línea con media de 3 años (" + avg3y.toFixed(0) + "€), desviación: " +
-      (parseFloat(devPct) > 0 ? "+" : "") + devPct + "%.";
+    var avg3y  = parseFloat((vals3y.reduce(function(s,v){ return s+v; }, 0) / vals3y.length).toFixed(1));
+    var devPct = parseFloat(((currentPrice - avg3y) / avg3y * 100).toFixed(1));
+    if (!isFinite(devPct)) {
+      c4 = "NEUTRAL"; c4desc = "No se puede calcular la desviación histórica.";
+    } else if (devPct >= 8) {
+      c4 = "VENDER";
+      c4desc = "El precio actual (" + currentPrice + "€) está un " + devPct + "% por encima de la media de los últimos 3 años (" + avg3y + "€). Es un nivel históricamente alto.";
+    } else if (devPct <= -8) {
+      c4 = "AGUANTAR";
+      c4desc = "El precio actual (" + currentPrice + "€) está un " + Math.abs(devPct) + "% por debajo de la media de los últimos 3 años (" + avg3y + "€). Es un nivel históricamente bajo.";
+    } else {
+      c4 = "NEUTRAL";
+      c4desc = "El precio actual (" + currentPrice + "€) está en línea con la media de los últimos 3 años (" + avg3y + "€), con una desviación de " + (devPct >= 0 ? "+" : "") + devPct + "%.";
+    }
   }
 
   // ── Resultado final ───────────────────────────────────────────────────────
   var criterios = [
-    {label:"Posición en campaña",   res:c1, desc:c1desc, icon:"📊"},
-    {label:"Tendencia reciente",    res:c2, desc:c2desc, icon:"📈"},
+    {label:"Posición en campaña",      res:c1, desc:c1desc, icon:"📊"},
+    {label:"Tendencia reciente",       res:c2, desc:c2desc, icon:"📈"},
     {label:"Estacionalidad histórica", res:c3, desc:c3desc, icon:"🗓️"},
-    {label:"Vs media 3 años",      res:c4, desc:c4desc, icon:"⌀"},
+    {label:"Comparativa 3 años",       res:c4, desc:c4desc, icon:"📉"},
   ];
 
-  var nVender   = criterios.filter(function(c){ return c.res === "VENDER"; }).length;
-  var nAguantar = criterios.filter(function(c){ return c.res === "AGUANTAR"; }).length;
+  var nV = criterios.filter(function(c){ return c.res === "VENDER"; }).length;
+  var nA = criterios.filter(function(c){ return c.res === "AGUANTAR"; }).length;
 
   var resultado, color, bg, icon;
-  if (nVender >= 3) {
-    resultado = "VENDER"; color = "#14532d"; bg = "#dcfce7"; icon = "📈";
-  } else if (nAguantar >= 3) {
+  if (nV >= 3) {
+    resultado = "VENDER";   color = "#14532d"; bg = "#dcfce7"; icon = "📈";
+  } else if (nA >= 3) {
     resultado = "AGUANTAR"; color = "#7f1d1d"; bg = "#fee2e2"; icon = "⏸";
-  } else if (nVender === 2 && nAguantar === 0) {
-    resultado = "VENDER"; color = "#14532d"; bg = "#dcfce7"; icon = "📈";
-  } else if (nAguantar === 2 && nVender === 0) {
+  } else if (nV === 2 && nA <= 1) {
+    resultado = "VENDER";   color = "#14532d"; bg = "#dcfce7"; icon = "📈";
+  } else if (nA === 2 && nV <= 1) {
     resultado = "AGUANTAR"; color = "#7f1d1d"; bg = "#fee2e2"; icon = "⏸";
   } else {
     resultado = "INDECISO"; color = "#92400e"; bg = "#fef3c7"; icon = "⚖️";
   }
 
-  var desc = criterios
-    .filter(function(c){ return c.res !== "NEUTRAL"; })
-    .map(function(c){ return c.desc; })
-    .join(" ");
-  if (!desc) desc = "Señales mixtas. Precio estable sin tendencia clara.";
+  // Resumen: solo los criterios no neutrales, con contexto
+  var activos = criterios.filter(function(c){ return c.res !== "NEUTRAL"; });
+  var desc;
+  if (activos.length === 0) {
+    desc = "Todos los indicadores son neutrales. No hay señal clara esta semana.";
+  } else {
+    var venderes  = activos.filter(function(c){ return c.res === "VENDER"; });
+    var aguantares = activos.filter(function(c){ return c.res === "AGUANTAR"; });
+    if (venderes.length > 0 && aguantares.length === 0) {
+      desc = venderes.map(function(c){ return c.desc; }).join(" ");
+    } else if (aguantares.length > 0 && venderes.length === 0) {
+      desc = aguantares.map(function(c){ return c.desc; }).join(" ");
+    } else {
+      // Contradicción: mostrar el criterio más fuerte de cada lado
+      desc = "Señales mixtas: " + venderes[0].desc + " Sin embargo, " + aguantares[0].desc.charAt(0).toLowerCase() + aguantares[0].desc.slice(1);
+    }
+  }
 
   return {s:resultado, color:color, bg:bg, icon:icon, desc:desc, criterios:criterios,
     currentPrice:currentPrice, currentDate:currentDate};
 }
+
+
+
+}
+
+
 
 // ── Multi-lonja sources ───────────────────────────────────────────────────────
 var SOURCES = [
