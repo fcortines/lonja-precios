@@ -417,7 +417,9 @@ def scrape_recent_urls():
                             all_links[date_str] = full_url
         except Exception as e:
             print(f"  ⚠ Error scraping {year}: {e}")
-
+            
+    for d, u in sorted(all_links.items())[-10:]:
+        print(f"    {d}: {u}")
     return all_links
 
 
