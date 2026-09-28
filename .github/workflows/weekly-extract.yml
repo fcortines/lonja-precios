@@ -2,16 +2,20 @@ name: Extracción semanal v2
 
 on:
   schedule:
-    - cron: '0 14 * * 2'
+    - cron: '0 13,15,17,19,21,23 * * 2'
   workflow_dispatch:
 
 jobs:
   extract:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Instalar dependencias
         run: pip install requests psycopg2-binary
@@ -27,3 +31,15 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python extract_cordoba.py --recent
+
+      - name: Crear archivo de actividad
+        run: echo "Última actualización: Mon Sep 28 09:00:11 UTC 2026" > last_update.txt
+
+      - name: Mantener repo activo
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto: actualización semanal ${{ github.run_started_at }}"
+          file_pattern: last_update.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
