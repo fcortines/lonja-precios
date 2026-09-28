@@ -408,6 +408,7 @@ def scrape_recent_urls():
                     full_url = link if link.startswith("http") else "https://lonjadesevilla.com" + link
                     fname = link.split("/")[-1].replace(".pdf","").replace("-","_").lower()
                     # Extraer fecha del nombre del archivo
+                    # Patrón 1: DD_de_MES_YYYY (formato habitual)
                     m = re.search(r'(\d{1,2})_de_([a-z]+)_(?:de_)?(\d{4})', fname)
                     if m:
                         dd, mes_str, yy = m.group(1), m.group(2), m.group(3)
@@ -415,11 +416,18 @@ def scrape_recent_urls():
                         if mes_num:
                             date_str = f"{yy}-{mes_num}-{dd.zfill(2)}"
                             all_links[date_str] = full_url
+                    else:
+                        # Patrón 2: COMISION_DD_MES_YYYY (ej: R_COMISION_15_SEPTIEMBRE_2026)
+                        m2 = re.search(r'(\d{1,2})_([a-z]+)_(\d{4})', fname)
+                        if m2:
+                            dd, mes_str, yy = m2.group(1), m2.group(2), m2.group(3)
+                            mes_num = MESES_INV.get(mes_str)
+                            if mes_num:
+                                date_str = f"{yy}-{mes_num}-{dd.zfill(2)}"
+                                all_links[date_str] = full_url
         except Exception as e:
             print(f"  ⚠ Error scraping {year}: {e}")
-            
-    for d, u in sorted(all_links.items())[-10:]:
-        print(f"    {d}: {u}")
+
     return all_links
 
 
