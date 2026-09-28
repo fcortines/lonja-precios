@@ -364,10 +364,6 @@ function calcSignal(k, allData) {
 
 
 
-}
-
-
-
 // ── Multi-lonja sources ───────────────────────────────────────────────────────
 var SOURCES = [
   {id:"sevilla",    label:"Lonja Sevilla",     flag:"🟡", color:"#0284c7"},
