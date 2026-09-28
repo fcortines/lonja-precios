@@ -168,15 +168,162 @@ const CAMPS = [
   {id:"25-26",label:"25/26",start:"2025-10-01",end:"2026-09-30"},
 ];
 
-function getSig(k) {
-  var M = {
-    tbn_g3:    {s:"ESPERAR",color:"#92400e",bg:"#fef3c7",icon:"⏸",desc:"Precio bajo respecto a media histórica. Posible repunte estacional en otoño."},
-    cebada_nac:{s:"VENDER", color:"#14532d",bg:"#dcfce7",icon:"📈",desc:"Máximos de 6 meses, +8% sobre media de campaña. Momento favorable para cerrar contratos."},
-    maiz_imp:  {s:"COMPRAR",color:"#7f1d1d",bg:"#fee2e2",icon:"📉",desc:"Mínimo estacional. Sube históricamente +12% de sep a dic."},
-    girasol_conv:{s:"ESPERAR",color:"#92400e",bg:"#fef3c7",icon:"⏸",desc:"Alta volatilidad sin señal clara. Precio en línea con media."},
-    colza:     {s:"VENDER", color:"#14532d",bg:"#dcfce7",icon:"📈",desc:"Tendencia alcista +15% desde inicio de campaña."},
-  };
-  return M[k]||{s:"S/D",color:"#64748b",bg:"#f1f5f9",icon:"—",desc:"Sin señal disponible para este producto."};
+// ── Signal calculation — real logic based on historical data ─────────────────
+function calcSignal(k, allData) {
+  if (!allData || allData.length < 10) {
+    return {s:"S/D", color:"#64748b", bg:"#f1f5f9", icon:"—",
+      desc:"Datos insuficientes para calcular señal.", criterios:[]};
+  }
+
+  // Get all rows with a real value for this product
+  var rows = allData.filter(function(r){ return r[k] != null; });
+  if (rows.length < 6) {
+    return {s:"S/D", color:"#64748b", bg:"#f1f5f9", icon:"—",
+      desc:"Datos insuficientes para este producto.", criterios:[]};
+  }
+
+  var last = rows[rows.length - 1];
+  var currentPrice = last[k];
+  var currentDate  = last.date;
+  var currentMonth = parseInt(currentDate.slice(5,7));
+
+  // ── Criterio 1: Posición en campaña actual ────────────────────────────────
+  // Campaña = oct-oct. Encuentra la campaña actual
+  var campStart, campEnd;
+  var cy = parseInt(currentDate.slice(0,4));
+  var cm = parseInt(currentDate.slice(5,7));
+  if (cm >= 10) {
+    campStart = cy + "-10-01"; campEnd = (cy+1) + "-09-30";
+  } else {
+    campStart = (cy-1) + "-10-01"; campEnd = cy + "-09-30";
+  }
+  var campRows = rows.filter(function(r){ return r.date >= campStart && r.date <= campEnd; });
+  var campVals = campRows.map(function(r){ return r[k]; });
+  var campMin = Math.min.apply(null, campVals);
+  var campMax = Math.max.apply(null, campVals);
+  var campRange = campMax - campMin;
+  var campPos = campRange > 0 ? (currentPrice - campMin) / campRange : 0.5;
+  var c1, c1desc;
+  if (campPos >= 0.67) {
+    c1 = "VENDER";
+    c1desc = "Precio en tercio superior de campaña (" + Math.round(campPos*100) + "% del rango). Nivel favorable para vender.";
+  } else if (campPos <= 0.33) {
+    c1 = "AGUANTAR";
+    c1desc = "Precio en tercio inferior de campaña (" + Math.round(campPos*100) + "% del rango). Esperar recuperación.";
+  } else {
+    c1 = "NEUTRAL";
+    c1desc = "Precio en zona media de campaña (" + Math.round(campPos*100) + "% del rango).";
+  }
+
+  // ── Criterio 2: Tendencia reciente (últimas 4 sesiones) ──────────────────
+  var recent = rows.slice(-5);
+  var trend = 0;
+  for (var i = 1; i < recent.length; i++) {
+    trend += recent[i][k] - recent[i-1][k];
+  }
+  trend = trend / (recent.length - 1); // media de cambios
+  var c2, c2desc;
+  if (trend > 1.5) {
+    c2 = "VENDER";
+    c2desc = "Tendencia alcista: +" + trend.toFixed(1) + "€/sesión en las últimas " + (recent.length-1) + " sesiones. Aprovechar el momento.";
+  } else if (trend < -1.5) {
+    c2 = "AGUANTAR";
+    c2desc = "Tendencia bajista: " + trend.toFixed(1) + "€/sesión en las últimas " + (recent.length-1) + " sesiones. Esperar estabilización.";
+  } else {
+    c2 = "NEUTRAL";
+    c2desc = "Precio estable: variación media de " + trend.toFixed(1) + "€/sesión.";
+  }
+
+  // ── Criterio 3: Estacionalidad histórica ─────────────────────────────────
+  // Calcular el precio medio de cada mes sobre todo el histórico (normalizado)
+  var monthAvgs = {};
+  var monthCounts = {};
+  rows.forEach(function(r) {
+    var m = parseInt(r.date.slice(5,7));
+    if (!monthAvgs[m]) { monthAvgs[m] = 0; monthCounts[m] = 0; }
+    monthAvgs[m] += r[k];
+    monthCounts[m]++;
+  });
+  var globalAvg = rows.reduce(function(s,r){ return s + r[k]; }, 0) / rows.length;
+  Object.keys(monthAvgs).forEach(function(m) {
+    monthAvgs[m] = monthAvgs[m] / monthCounts[m];
+  });
+  // Rank del mes actual vs todos los meses
+  var currentMonthAvg = monthAvgs[currentMonth] || globalAvg;
+  var monthValues = Object.values(monthAvgs).sort(function(a,b){ return a-b; });
+  var monthRank = monthValues.indexOf(currentMonthAvg) / (monthValues.length - 1);
+  var MONTH_NAMES = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
+    7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"};
+  var pctVsAvg = ((currentMonthAvg - globalAvg) / globalAvg * 100).toFixed(1);
+  var c3, c3desc;
+  if (monthRank >= 0.67) {
+    c3 = "VENDER";
+    c3desc = MONTH_NAMES[currentMonth] + " históricamente es un mes de precios altos (" +
+      (pctVsAvg > 0 ? "+" : "") + pctVsAvg + "% vs media anual). Patrón estacional favorable para vender.";
+  } else if (monthRank <= 0.33) {
+    c3 = "AGUANTAR";
+    c3desc = MONTH_NAMES[currentMonth] + " históricamente es un mes de precios bajos (" +
+      (pctVsAvg > 0 ? "+" : "") + pctVsAvg + "% vs media anual). Esperar mejores meses.";
+  } else {
+    c3 = "NEUTRAL";
+    c3desc = MONTH_NAMES[currentMonth] + " con estacionalidad neutra (" +
+      (pctVsAvg > 0 ? "+" : "") + pctVsAvg + "% vs media anual).";
+  }
+
+  // ── Criterio 4: Desviación sobre media histórica 3 años ──────────────────
+  var cutoff3y = new Date(currentDate);
+  cutoff3y.setFullYear(cutoff3y.getFullYear() - 3);
+  var cutoff3yStr = cutoff3y.toISOString().slice(0,10);
+  var rows3y = rows.filter(function(r){ return r.date >= cutoff3yStr; });
+  var avg3y = rows3y.length > 0
+    ? rows3y.reduce(function(s,r){ return s + r[k]; }, 0) / rows3y.length
+    : globalAvg;
+  var devPct = ((currentPrice - avg3y) / avg3y * 100).toFixed(1);
+  var c4, c4desc;
+  if (parseFloat(devPct) >= 8) {
+    c4 = "VENDER";
+    c4desc = "Precio actual +" + devPct + "% sobre media de 3 años (" + avg3y.toFixed(0) + "€). Precio históricamente alto.";
+  } else if (parseFloat(devPct) <= -8) {
+    c4 = "AGUANTAR";
+    c4desc = "Precio actual " + devPct + "% bajo media de 3 años (" + avg3y.toFixed(0) + "€). Precio históricamente bajo.";
+  } else {
+    c4 = "NEUTRAL";
+    c4desc = "Precio en línea con media de 3 años (" + avg3y.toFixed(0) + "€), desviación: " +
+      (parseFloat(devPct) > 0 ? "+" : "") + devPct + "%.";
+  }
+
+  // ── Resultado final ───────────────────────────────────────────────────────
+  var criterios = [
+    {label:"Posición en campaña",   res:c1, desc:c1desc, icon:"📊"},
+    {label:"Tendencia reciente",    res:c2, desc:c2desc, icon:"📈"},
+    {label:"Estacionalidad histórica", res:c3, desc:c3desc, icon:"🗓️"},
+    {label:"Vs media 3 años",      res:c4, desc:c4desc, icon:"⌀"},
+  ];
+
+  var nVender   = criterios.filter(function(c){ return c.res === "VENDER"; }).length;
+  var nAguantar = criterios.filter(function(c){ return c.res === "AGUANTAR"; }).length;
+
+  var resultado, color, bg, icon;
+  if (nVender >= 3) {
+    resultado = "VENDER"; color = "#14532d"; bg = "#dcfce7"; icon = "📈";
+  } else if (nAguantar >= 3) {
+    resultado = "AGUANTAR"; color = "#7f1d1d"; bg = "#fee2e2"; icon = "⏸";
+  } else if (nVender === 2 && nAguantar === 0) {
+    resultado = "VENDER"; color = "#14532d"; bg = "#dcfce7"; icon = "📈";
+  } else if (nAguantar === 2 && nVender === 0) {
+    resultado = "AGUANTAR"; color = "#7f1d1d"; bg = "#fee2e2"; icon = "⏸";
+  } else {
+    resultado = "INDECISO"; color = "#92400e"; bg = "#fef3c7"; icon = "⚖️";
+  }
+
+  var desc = criterios
+    .filter(function(c){ return c.res !== "NEUTRAL"; })
+    .map(function(c){ return c.desc; })
+    .join(" ");
+  if (!desc) desc = "Señales mixtas. Precio estable sin tendencia clara.";
+
+  return {s:resultado, color:color, bg:bg, icon:icon, desc:desc, criterios:criterios,
+    currentPrice:currentPrice, currentDate:currentDate};
 }
 
 // ── Multi-lonja sources ───────────────────────────────────────────────────────
@@ -1045,7 +1192,6 @@ function Dashboard(props){
   var filtered=allDataProp.filter(function(r){return r.date>=effectiveFrom&&r.date<=effectiveTo;});
   var cc=CAMPS.find(function(c){return c.id===camp;});
   var crows=cc?campRows(cc,allDataProp):[];
-  var sig=getSig(recP);
   var CC=["#0284c7","#16a34a","#dc2626","#d97706","#7c3aed","#db2777","#0891b2","#65a30d","#ea580c","#9333ea","#0f766e"];
   var YRS=["2015","2016","2017","2018","2019","2020","2021","2022","2023","2024","2025","2026"];
   var TABS=[
@@ -1569,82 +1715,81 @@ function Dashboard(props){
 
         {/* ══ SEÑALES ══ */}
         {tab==="senales"&&(
-          <div style={{animation:"fi .3s ease",position:"relative"}}>
-            {/* Marca de agua */}
-            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%) rotate(-25deg)",
-              fontSize:64,fontWeight:900,color:"rgba(148,163,184,0.18)",pointerEvents:"none",
-              zIndex:999,whiteSpace:"nowrap",userSelect:"none",fontFamily:"'DM Mono',monospace",letterSpacing:4}}>
-              EN CONSTRUCCIÓN
-            </div>
-            <div style={{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:10,
-              padding:"10px 16px",fontSize:12,color:"#92400e",fontFamily:"'DM Mono',monospace",
-              marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
-              🚧 <span>Esta pestaña está en construcción — los datos mostrados son orientativos y pueden no ser precisos.</span>
-            </div>
+          <div style={{animation:"fi .3s ease"}}>
             <div style={box}><ProdSelector selP={sSelP} setSelP={setSSelP}/></div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:10,marginBottom:20}}>
               {sSelP.map(function(k){
                 var p=ALL_PRODS.find(function(x){return x.key===k;});if(!p)return null;
-                var si=getSig(k),active=recP===k;
+                var si=calcSignal(k,allDataProp),active=recP===k;
                 return(
                   <div key={k} onClick={function(){setRecP(k);}} style={{
                     background:"#fff",border:"2px solid "+(active?p.color:"#f1f5f9"),
                     borderRadius:14,padding:"14px",cursor:"pointer",transition:"all .15s",
                     boxShadow:active?"0 6px 20px rgba(0,0,0,0.1)":"0 1px 3px rgba(0,0,0,0.04)"}}>
                     <div style={{fontSize:11,color:"#64748b",marginBottom:6,fontFamily:"'DM Mono',monospace"}}>{p.label}</div>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                       <span style={{fontSize:24}}>{si.icon}</span>
                       <span style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,
                         background:si.bg,color:si.color,fontFamily:"'DM Mono',monospace"}}>{si.s}</span>
                     </div>
+                    {si.currentPrice&&<div style={{fontSize:13,fontWeight:700,color:"#334155",fontFamily:"'DM Mono',monospace"}}>{si.currentPrice}€</div>}
                   </div>
                 );
               })}
             </div>
-            {sig&&(
-              <div style={Object.assign({},box,{marginBottom:14,boxShadow:"0 4px 20px rgba(0,0,0,0.06)"})}>
-                <div style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
-                  <div style={{width:56,height:56,background:sig.bg,borderRadius:14,
-                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}}>{sig.icon}</div>
-                  <div style={{flex:1,minWidth:180}}>
-                    <div style={{fontSize:11,color:"#94a3b8",marginBottom:4,fontFamily:"'DM Mono',monospace"}}>
-                      Señal · {(function(){var p=ALL_PRODS.find(function(p){return p.key===recP;});return p?p.label:"";})()}
-                    </div>
-                    <div style={{fontSize:26,fontWeight:700,color:sig.color,marginBottom:8}}>{sig.s}</div>
-                    <p style={{fontSize:14,color:"#334155",lineHeight:1.75}}>{sig.desc}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div style={Object.assign({},box,{marginBottom:14})}>
-              <div style={{fontSize:14,fontWeight:700,color:"#334155",marginBottom:14,
-                display:"flex",alignItems:"center",gap:8}}>
-                <span>🔬</span> Cómo se determinan las señales
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                {[
-                  {icon:"📊",t:"Posición en campaña",     d:"Precio vs máximo/mínimo de la campaña (oct–oct). Tercio superior → VENDER; tercio inferior → COMPRAR."},
-                  {icon:"📈",t:"Tendencia reciente",       d:"Pendiente media de las últimas 6 sesiones. Positiva acelerada → VENDER; negativa sostenida → COMPRAR."},
-                  {icon:"🗓️",t:"Estacionalidad histórica", d:"Patrón estacional 2015–2024. Detecta si el momento actual está en fase alcista o bajista histórica."},
-                  {icon:"⌀", t:"Desviación sobre media",   d:">+10% sobre media histórica → VENDER. <-8% → COMPRAR."},
-                  {icon:"🔁",t:"Confirmación multiseñal",  d:"Necesarios ≥2 criterios coincidentes. Si hay contradicción → ESPERAR."},
-                  {icon:"⚠️",t:"Limitaciones",             d:"Solo análisis estadístico histórico. No incluye clima, cosechas ni geopolítica. No es asesoramiento financiero."},
-                ].map(function(it,i){
-                  return(
-                    <div key={i} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"12px",background:"#f8fafc",borderRadius:10}}>
-                      <span style={{fontSize:20,flexShrink:0,marginTop:1}}>{it.icon}</span>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:"#1e293b",marginBottom:3}}>{it.t}</div>
-                        <div style={{fontSize:12,color:"#64748b",lineHeight:1.6}}>{it.d}</div>
+            {recP&&(function(){
+              var sig=calcSignal(recP,allDataProp);
+              var p=ALL_PRODS.find(function(x){return x.key===recP;});
+              return(
+                <div>
+                  {/* Tarjeta principal */}
+                  <div style={Object.assign({},box,{marginBottom:14,boxShadow:"0 4px 20px rgba(0,0,0,0.06)"})}>
+                    <div style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
+                      <div style={{width:56,height:56,background:sig.bg,borderRadius:14,
+                        display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}}>{sig.icon}</div>
+                      <div style={{flex:1,minWidth:180}}>
+                        <div style={{fontSize:11,color:"#94a3b8",marginBottom:4,fontFamily:"'DM Mono',monospace"}}>
+                          Señal · {p?p.label:""} · {sig.currentDate||""}
+                        </div>
+                        <div style={{fontSize:26,fontWeight:700,color:sig.color,marginBottom:8}}>{sig.s}</div>
+                        <p style={{fontSize:13,color:"#334155",lineHeight:1.75,margin:0}}>{sig.desc}</p>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                  </div>
+
+                  {/* Desglose de criterios */}
+                  {sig.criterios&&(
+                    <div style={Object.assign({},box,{marginBottom:14})}>
+                      <div style={{fontSize:13,fontWeight:700,color:"#334155",marginBottom:12}}>Desglose de criterios</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {sig.criterios.map(function(c,i){
+                          var cColor = c.res==="VENDER"?"#14532d":c.res==="AGUANTAR"?"#7f1d1d":"#64748b";
+                          var cBg   = c.res==="VENDER"?"#dcfce7":c.res==="AGUANTAR"?"#fee2e2":"#f1f5f9";
+                          return(
+                            <div key={i} style={{display:"flex",gap:12,alignItems:"flex-start",
+                              padding:"12px",background:"#f8fafc",borderRadius:10}}>
+                              <span style={{fontSize:18,flexShrink:0,marginTop:1}}>{c.icon}</span>
+                              <div style={{flex:1}}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                                  <span style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{c.label}</span>
+                                  <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:12,
+                                    background:cBg,color:cColor,fontFamily:"'DM Mono',monospace"}}>{c.res}</span>
+                                </div>
+                                <div style={{fontSize:12,color:"#64748b",lineHeight:1.6}}>{c.desc}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div style={{background:"#fef9c3",borderRadius:10,padding:"12px 16px",fontSize:12,
               color:"#92400e",border:"1px solid #fde68a",fontFamily:"'DM Mono',monospace",lineHeight:1.6}}>
-              ⚠️ Señales orientativas basadas en análisis estadístico histórico. No constituyen asesoramiento financiero.
+              ⚠️ Señales orientativas basadas en análisis estadístico histórico. No constituyen asesoramiento financiero ni tienen en cuenta factores externos (clima, geopolítica, cosechas).
             </div>
           </div>
         )}
