@@ -541,11 +541,11 @@ function campRows(c, allData, startMonth){
   // but the data still comes from the same date range — just the chart display shifts
   return rows;
 }
-function avgOf(rows,k){var v=rows.map(function(r){return r[k];}).filter(function(x){return x!=null;});return v.length?+(v.reduce(function(a,b){return a+b;},0)/v.length).toFixed(1):null;}
-function lastVal(rows,k){var f=rows.slice().reverse().find(function(r){return r[k]!=null;});return f?f[k]:null;}
+function avgOf(rows,k){var v=rows.map(function(r){var n=parseFloat(r[k]);return isFinite(n)&&n>0&&n<10000?n:null;}).filter(function(x){return x!==null;});return v.length?+(v.reduce(function(a,b){return a+b;},0)/v.length).toFixed(1):null;}
+function lastVal(rows,k){var f=rows.slice().reverse().find(function(r){var n=parseFloat(r[k]);return isFinite(n)&&n>0&&n<10000;});return f?parseFloat(f[k]):null;}
 function trendDir(rows,k){
   // Compare last two sessions with a real value — simple and clear
-  var v=rows.map(function(r){return r[k];}).filter(function(x){return x!=null;});
+  var v=rows.map(function(r){var n=parseFloat(r[k]);return isFinite(n)&&n>0&&n<10000?n:null;}).filter(function(x){return x!==null;});
   if(v.length<2)return 0;
   var last=v[v.length-1];
   var prev=v[v.length-2];
